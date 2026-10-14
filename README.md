@@ -1,29 +1,23 @@
-# Cardio Atlas — GitHub Pages package
+# Human Atlas - GitHub Pages
 
-## Publish using the GitHub website
-1. Extract this ZIP on your computer. Do not upload the ZIP itself.
-2. Create a public GitHub repository named cardio-atlas.
-3. Choose Add file > Upload files. Upload all extracted files and the vendor folder, preserving its contents. index.html must be at the repository root.
-4. Commit the files to main.
-5. Ensure .nojekyll exists at the repository root. If your file picker hides it, use Add file > Create new file and name it .nojekyll. A blank line is sufficient.
-6. Open Settings > Pages. Select Deploy from a branch, main, and / (root). Click Save.
-7. Check Actions for the pages deployment. Your address will be https://YOUR-USERNAME.github.io/cardio-atlas/ . GitHub Pages also shows the actual address.
+Upload extracted files to the repository root. Do not upload the ZIP itself.
 
-No npm install, build, API key, or backend is required. Keep vendor/ intact; it includes Three.js, OrbitControls, fonts and the Three.js license. The site uses relative URLs suitable for a repository subpath.
+Updated pages:
+- index.html: new Human Atlas welcome page with two explorer cards.
+- Chatgpt3b.html: the previous Cardio Atlas explorer, with a Home link.
+- about.html: updated navigation.
+All existing scripts, styles and vendor assets are retained.
 
-## Update
-Upload changed files to the same paths and commit to main; Pages republishes automatically.
+IMPORTANT: Keep or upload your own gem_3d_cardiovascular_explorer.html at the repository root. Its source was not supplied, so this package links to that exact filename but does not contain or overwrite it. Keep its assets too. The second link will return 404 until the file is present.
 
-## Troubleshooting
-- 404: verify index.html is at the root, main is selected, and the Pages deployment succeeded.
-- Blank 3D scene: use a WebGL2-capable browser with hardware acceleration, and verify vendor/ was uploaded.
-- Missing styles or scripts: preserve filenames, folder structure and capitalization.
-- Do not open index.html via file:// for local testing; use a static HTTP server.
+For an existing installation, replace index.html and about.html, add Chatgpt3b.html, and retain the Gemini file and its dependencies.
 
-## Model scope
-The anatomy is a procedural educational approximation, not clinically validated surgical geometry. Pressure/volume curves and flow are illustrative. Medical assumptions and references are in the in-app field guide. Browser/device validation is still required for production use.
+Publish: Settings > Pages > Deploy from a branch > main > / (root) > Save. Keep .nojekyll at the root. Filenames are case-sensitive.
 
-Official documentation: https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site
+Navigation:
+index.html -> Chatgpt3b.html
+index.html -> gem_3d_cardiovascular_explorer.html
+Chatgpt3b.html -> index.html (Home)
+about.html -> index.html and Chatgpt3b.html
 
-## About page
-The header About link opens ./about.html. The About page links back to ./index.html. To update an existing deployment, replace index.html and add about.html; other app files are unchanged.
+Scope: procedural teaching anatomy, not clinically validated surgical geometry. Browser/device validation is still required. See the explorer field guide for assumptions and references.
