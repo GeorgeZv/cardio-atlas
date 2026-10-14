@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CardioSim 3D — Electrophysiology, Arrhythmia & Hemodynamics Simulator</title>
+    <title>CardioSim 3D — Electrophysiology, Arrhythmia & Photorealistic Heart Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -50,6 +50,10 @@
             height: 100%;
             z-index: 1;
             background: radial-gradient(circle at 45% 42%, #162238 0%, #090d18 65%, #04070e 100%);
+            transition: background 0.6s ease;
+        }
+        #canvas-container.real-3d-bg {
+            background: radial-gradient(circle at 48% 42%, #2b0d14 0%, #110508 58%, #040203 100%);
         }
         ::-webkit-scrollbar {
             width: 5px;
@@ -133,6 +137,12 @@
         .rhythm-btn-active {
             box-shadow: 0 0 14px rgba(56, 189, 248, 0.25);
         }
+        .real3d-active-btn {
+            background: linear-gradient(135deg, rgba(225, 29, 72, 0.42), rgba(159, 18, 57, 0.65)) !important;
+            border-color: #fb7185 !important;
+            color: #ffe4e6 !important;
+            box-shadow: 0 0 16px rgba(244, 63, 94, 0.45);
+        }
     </style>
 </head>
 <body class="font-sans antialiased selection:bg-sky-500 selection:text-white">
@@ -146,7 +156,7 @@
         <div class="text-[10px] text-sky-400 font-mono" id="tooltip-sub">Ventriculus sinister • Click to inspect</div>
     </div>
 
-    <!-- TOP TELEMETRY & RHYTHM STATUS BAR -->
+    <!-- TOP TELEMETRY & QUICK CONTROLS BAR -->
     <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 px-4 py-2 rounded-xl medical-panel">
         <!-- Brand -->
         <div class="flex items-center gap-3">
@@ -158,7 +168,7 @@
             </div>
             <div>
                 <div class="flex items-center gap-2">
-                    <h1 class="text-sm font-bold tracking-tight text-white">CARDIOSIM <span class="text-sky-400 font-mono text-xs">EP.v5</span></h1>
+                    <h1 class="text-sm font-bold tracking-tight text-white">CARDIOSIM <span class="text-sky-400 font-mono text-xs">EP.v6</span></h1>
                     <span id="rhythm-status-badge" class="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded font-semibold">
                         Normal Sinus Rhythm
                     </span>
@@ -166,12 +176,12 @@
                         Syncing Next Cycle...
                     </span>
                 </div>
-                <p id="ui-subtitle" class="text-[11px] text-slate-400 hidden md:block">Real-Time 3D Cardiac Conduction, Arrhythmia Mechanics & Synchronized Lead II ECG</p>
+                <p id="ui-subtitle" class="text-[11px] text-slate-400 hidden lg:block">Real-Time 3D Cardiac Conduction, Arrhythmia Mechanics & Synchronized Lead II ECG</p>
             </div>
         </div>
 
         <!-- Live Conduction & Cardiac Phase Banner -->
-        <div class="flex items-center gap-3 bg-slate-900/90 border border-slate-700/70 rounded-lg px-3 py-1.5">
+        <div class="hidden md:flex items-center gap-3 bg-slate-900/90 border border-slate-700/70 rounded-lg px-3 py-1.5">
             <div class="flex flex-col">
                 <span id="lbl-current-phase" class="text-[9px] font-mono uppercase tracking-widest text-slate-400">Active EP / Mechanical Phase</span>
                 <div class="flex items-center gap-2">
@@ -187,7 +197,7 @@
         </div>
 
         <!-- Real-Time Vitals Readout -->
-        <div class="hidden xl:flex items-center gap-4 font-mono">
+        <div class="hidden 2xl:flex items-center gap-4 font-mono">
             <div class="flex flex-col items-end">
                 <span id="lbl-hr" class="text-[9px] text-slate-400 uppercase">Heart Rate</span>
                 <div class="text-sm font-bold text-emerald-400 ecg-glow"><span id="hud-bpm">72</span> <span class="text-[10px] font-normal text-slate-400">BPM</span></div>
@@ -206,16 +216,30 @@
             </div>
         </div>
 
-        <!-- Controls: Language, Auto-Dim, Reset -->
-        <div class="flex items-center gap-1.5">
+        <!-- Quick Action Controls: Show/Hide Labels, Real 3D Render Toggle, Language, Auto-Dim, Reset -->
+        <div class="flex flex-wrap items-center gap-1.5">
+            <!-- Show / Hide All Floating Labels Button -->
+            <button id="btn-toggle-labels" onclick="toggleLabelsVisibility()" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 transition flex items-center gap-1.5" title="Show or Hide all floating anatomical labels (LA, PVEINS, AV, MV, etc.)">
+                <span id="labels-indicator" class="w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_6px_#38bdf8]"></span>
+                <span id="lbl-pins-btn">Labels: ON</span>
+            </button>
+
+            <!-- Real 3D Photorealistic Organic Tissue Render Button -->
+            <button id="btn-real-3d" onclick="toggleReal3DMode()" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/90 hover:bg-slate-700 text-rose-300 border border-slate-700 transition flex items-center gap-1.5" title="Render realistic organic wet myocardial tissue, striations & epicardial fat">
+                <span id="real3d-indicator" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                <span id="lbl-real3d-btn">Real 3D: OFF</span>
+            </button>
+
             <button id="btn-lang" onclick="toggleLanguage()" class="px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-slate-800/90 hover:bg-slate-700 text-amber-300 border border-slate-700 transition">
                 EN / ES
             </button>
+
             <button id="btn-isolate-mode" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5" title="Dim unselected structures">
-                <span id="isolate-indicator" class="w-2 h-2 rounded-full bg-sky-400"></span>
-                <span id="lbl-autodim">Auto-Dim: ON</span>
+                <span id="isolate-indicator" class="w-2 h-2 rounded-full bg-slate-500"></span>
+                <span id="lbl-autodim">Auto-Dim: OFF</span>
             </button>
-            <button id="btn-reset-view" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 transition flex items-center gap-1">
+
+            <button id="btn-reset-view" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-700 transition flex items-center gap-1">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                 <span id="lbl-reset">Reset</span>
             </button>
@@ -230,7 +254,7 @@
                 Rhythms (6)
             </button>
             <button id="tab-btn-layers" onclick="switchLeftTab('layers')" class="py-1.5 text-[11px] font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition">
-                3D Layers
+                3D & Labels
             </button>
             <button id="tab-btn-index" onclick="switchLeftTab('index')" class="py-1.5 text-[11px] font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition">
                 Anatomy (18)
@@ -247,6 +271,19 @@
             <!-- 6 Rhythm State Cards populated dynamically -->
             <div id="rhythm-buttons-container" class="space-y-1.5"></div>
 
+            <!-- Quick Visual Toggles inside Rhythm Tab for immediate access -->
+            <div class="bg-slate-900/80 border border-slate-800 rounded-lg p-2.5 space-y-2">
+                <div class="text-[10px] font-mono uppercase text-slate-400" id="lbl-quick-view">Display & Render Options</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button onclick="toggleLabelsVisibility()" id="quick-btn-labels" class="py-1.5 px-2 rounded text-[11px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/40 transition flex items-center justify-center gap-1.5">
+                        <span>🏷️</span> <span id="quick-lbl-text">Hide Labels</span>
+                    </button>
+                    <button onclick="toggleReal3DMode()" id="quick-btn-real3d" class="py-1.5 px-2 rounded text-[11px] font-semibold bg-slate-800 text-rose-300 border border-slate-700 hover:bg-slate-700 transition flex items-center justify-center gap-1.5">
+                        <span>🫀</span> <span id="quick-real3d-text">Real 3D Mode</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Conduction Pathway Legend -->
             <div class="bg-slate-950/70 border border-slate-800/90 rounded-lg p-2.5 space-y-1.5 text-[11px]">
                 <div id="lbl-ep-legend" class="text-[10px] font-mono uppercase text-slate-400">Active Conduction Legend</div>
@@ -259,8 +296,20 @@
             </div>
         </div>
 
-        <!-- TAB 2: 3D LAYERS & CORONAL CUTAWAY -->
-        <div id="left-tab-layers" class="hidden flex-1 overflow-y-auto p-3.5 space-y-4">
+        <!-- TAB 2: 3D LAYERS, RENDERING MODE & CORONAL CUTAWAY -->
+        <div id="left-tab-layers" class="hidden flex-1 overflow-y-auto p-3.5 space-y-3.5">
+            <!-- Rendering Style Card: Schematic vs Real 3D -->
+            <div class="bg-slate-900/75 border border-slate-800 rounded-lg p-3 space-y-2">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-xs font-semibold text-white" id="lbl-render-mode-title">Real 3D Tissue Shader</div>
+                        <div class="text-[10px] text-slate-400" id="lbl-render-mode-sub">Wet myocardium striation PBR & epicardial fat</div>
+                    </div>
+                    <input type="checkbox" id="toggle-real3d-checkbox" class="w-4 h-4 accent-rose-500 rounded cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Coronal Cutaway Section -->
             <div class="bg-slate-900/75 border border-slate-800 rounded-lg p-3 space-y-2.5">
                 <div class="flex items-center justify-between">
                     <label class="text-xs font-semibold text-white flex items-center gap-1.5">
@@ -288,6 +337,17 @@
 
                 <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/90 border border-slate-800/80 cursor-pointer transition">
                     <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                        <div>
+                            <div class="text-xs font-medium text-slate-200" id="lbl-layer-pins">Floating Anatomical Labels</div>
+                            <div class="text-[10px] text-slate-400">Show / hide all 18 3D callout badges</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="toggle-pins" checked class="w-4 h-4 accent-sky-500 rounded">
+                </label>
+
+                <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/90 border border-slate-800/80 cursor-pointer transition">
+                    <div class="flex items-center gap-2.5">
                         <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
                         <div>
                             <div class="text-xs font-medium text-slate-200">Conduction Pathways</div>
@@ -302,7 +362,7 @@
                         <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
                         <div>
                             <div class="text-xs font-medium text-slate-200">Exterior Myocardium Shell</div>
-                            <div class="text-[10px] text-slate-400">Semi-transparent epicardium</div>
+                            <div class="text-[10px] text-slate-400">Epicardial outer wall</div>
                         </div>
                     </div>
                     <input type="checkbox" id="toggle-myocardium" checked class="w-4 h-4 accent-sky-500 rounded">
@@ -329,17 +389,6 @@
                     </div>
                     <input type="checkbox" id="toggle-coronary" checked class="w-4 h-4 accent-sky-500 rounded">
                 </label>
-
-                <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/90 border border-slate-800/80 cursor-pointer transition">
-                    <div class="flex items-center gap-2.5">
-                        <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
-                        <div>
-                            <div class="text-xs font-medium text-slate-200">3D Anatomical Pins</div>
-                            <div class="text-[10px] text-slate-400">Floating callout markers</div>
-                        </div>
-                    </div>
-                    <input type="checkbox" id="toggle-pins" checked class="w-4 h-4 accent-sky-500 rounded">
-                </label>
             </div>
         </div>
 
@@ -349,7 +398,7 @@
 
     <!-- RIGHT DRAWER: RHYTHM CLINICAL TELEMETRY & ANATOMICAL INSPECTOR -->
     <aside id="right-drawer" class="fixed top-20 right-3 bottom-48 z-20 w-80 md:w-96 rounded-xl medical-panel flex flex-col overflow-hidden transition-transform duration-300">
-        <!-- Rhythm Clinical Education Banner (Always Visible at Top of Right Drawer) -->
+        <!-- Rhythm Clinical Education Banner -->
         <div id="rhythm-clinical-card" class="p-3.5 border-b border-slate-800 bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 space-y-2">
             <div class="flex items-center justify-between">
                 <span id="rhythm-card-badge" class="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold">
@@ -390,7 +439,6 @@
 
         <!-- Selected Structure Details Body -->
         <div class="flex-1 overflow-y-auto p-3.5 space-y-3 text-xs">
-            <!-- Instantaneous Phase Status -->
             <div class="p-2.5 rounded-lg bg-sky-950/30 border border-sky-500/30 space-y-1">
                 <div class="flex items-center justify-between">
                     <span class="text-[10px] font-mono uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
@@ -402,7 +450,6 @@
                 <p id="telemetry-live-status" class="text-[11px] text-slate-100 font-medium leading-relaxed"></p>
             </div>
 
-            <!-- Metrics Grid -->
             <div class="grid grid-cols-3 gap-1.5 font-mono">
                 <div class="p-2 rounded-lg bg-slate-900/90 border border-slate-800">
                     <div class="text-[9px] text-slate-400 uppercase">Pressure</div>
@@ -421,13 +468,11 @@
                 </div>
             </div>
 
-            <!-- Description -->
             <div class="space-y-1">
                 <h3 class="text-[10px] font-mono uppercase tracking-wider text-slate-400">Anatomy & Electrophysiology</h3>
                 <p id="telemetry-description" class="text-[11px] text-slate-300 leading-relaxed bg-slate-900/50 p-2.5 rounded-lg border border-slate-800/80"></p>
             </div>
 
-            <!-- Pearls -->
             <div class="space-y-1">
                 <h3 class="text-[10px] font-mono uppercase tracking-wider text-rose-400">Clinical Pearls</h3>
                 <ul id="telemetry-pearls" class="space-y-1 text-[11px] text-slate-300 bg-slate-900/60 p-2.5 rounded-lg border border-slate-800"></ul>
@@ -437,9 +482,7 @@
 
     <!-- BOTTOM DOCK: LIVE SCROLLING LEAD II ECG OSCILLOSCOPE + WIGGERS MONITOR -->
     <footer class="fixed bottom-3 left-3 right-3 h-44 z-30 rounded-xl medical-panel flex flex-col overflow-hidden">
-        <!-- Control Strip -->
         <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-1.5 border-b border-slate-800 bg-slate-950/80">
-            <!-- Left: Play/Pause, Continuous Speed Slider & Preset Buttons -->
             <div class="flex flex-wrap items-center gap-2">
                 <button id="btn-play-pause" onclick="togglePlayPause()" class="px-3 py-1 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs flex items-center gap-1 transition shadow">
                     <svg id="icon-pause" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
@@ -447,7 +490,6 @@
                     <span id="play-pause-text">Pause</span>
                 </button>
 
-                <!-- Speed Presets + Continuous Slider (0.25x to 2.0x) -->
                 <div class="flex items-center bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 gap-1.5 text-[11px] font-mono">
                     <span class="text-[10px] text-slate-400" id="lbl-speed">Speed:</span>
                     <button onclick="setPlaybackSpeed(0.25)" id="speed-025" class="px-1.5 py-0.5 rounded text-slate-400 hover:text-white transition">0.25x</button>
@@ -458,7 +500,6 @@
                     <span id="speed-readout" class="text-sky-400 font-bold w-10 text-right">1.00x</span>
                 </div>
 
-                <!-- Monitor Mode Switch: Scrolling Live ECG vs Static Wiggers Loop -->
                 <div class="flex items-center bg-slate-900 border border-slate-800 rounded p-0.5 text-[10px] font-mono">
                     <button id="mode-btn-ecg" onclick="setMonitorMode('scrolling')" class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold transition">
                         Live Lead II ECG Strip
@@ -468,14 +509,12 @@
                     </button>
                 </div>
 
-                <!-- Scrubber (when paused or inspecting phase) -->
                 <div class="hidden xl:flex items-center gap-1.5">
                     <span class="text-[10px] font-mono text-slate-400">Phase:</span>
                     <input type="range" id="wiggers-scrubber" min="0" max="1" step="0.002" value="0" class="w-24 clinical-slider">
                 </div>
             </div>
 
-            <!-- Right: Signal Legend -->
             <div class="flex items-center gap-3 text-[10px] font-mono">
                 <span class="flex items-center gap-1 text-emerald-400 font-semibold"><span class="w-2.5 h-0.5 bg-emerald-400 inline-block shadow-[0_0_6px_#34d399]"></span>ECG Lead II (25 mm/s)</span>
                 <span class="flex items-center gap-1 text-rose-400"><span class="w-2.5 h-0.5 bg-rose-400 inline-block"></span>LV Pressure</span>
@@ -484,7 +523,6 @@
             </div>
         </div>
 
-        <!-- Oscilloscope & Wiggers Canvas Container -->
         <div class="relative flex-1 w-full h-full bg-slate-950/80" id="wiggers-container">
             <canvas id="wiggers-canvas" class="w-full h-full block"></canvas>
         </div>
@@ -495,164 +533,101 @@
          * ============================================================================
          * 1. STATE-DRIVEN RHYTHM & ARRHYTHMIA ENGINE (6 CLINICAL STATES)
          * ============================================================================
-         * Each rhythm defines its own timing profile, RR interval generator,
-         * Lead II ECG waveform synthesizer, chamber contraction kinematics, and
-         * electrical conduction activation rules.
          */
         const RHYTHM_PROFILES = {
             NSR: {
-                id: "NSR",
-                bpm: 72,
-                bpmRangeText: "72 BPM",
+                id: "NSR", bpm: 72, bpmRangeText: "72 BPM",
                 badgeClass: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-                dotColor: "bg-emerald-400",
-                accentHex: "#34d399",
-                sv: 75,
-                ef: "62%",
-                prText: "0.16s (120ms AV Delay)",
-                qrsText: "0.08s Narrow | CO 5.4 L/m",
+                dotColor: "bg-emerald-400", accentHex: "#34d399", sv: 75, ef: "62%",
+                prText: "0.16s (120ms AV Delay)", qrsText: "0.08s Narrow | CO 5.4 L/m",
                 en: {
-                    name: "Normal Sinus Rhythm",
-                    short: "NSR • 72 BPM",
-                    statusBadge: "Normal Sinus Rhythm",
-                    categoryBadge: "Physiological Pacemaker",
+                    name: "Normal Sinus Rhythm", short: "NSR • 72 BPM",
+                    statusBadge: "Normal Sinus Rhythm", categoryBadge: "Physiological Pacemaker",
                     note: "SA node fires at 72 BPM -> radial atrial depolarization (P wave) -> physiological ~0.12s delay at the AV node (PR segment) allowing complete ventricular filling -> rapid His-Purkinje conduction (narrow QRS) -> coordinated biventricular systole and T-wave repolarization."
                 },
                 es: {
-                    name: "Ritmo Sinusal Normal",
-                    short: "RSN • 72 LPM",
-                    statusBadge: "Ritmo Sinusal Normal",
-                    categoryBadge: "Marcapasos Fisiológico",
+                    name: "Ritmo Sinusal Normal", short: "RSN • 72 LPM",
+                    statusBadge: "Ritmo Sinusal Normal", categoryBadge: "Marcapasos Fisiológico",
                     note: "El nodo SA dispara a 72 LPM -> despolarización auricular (onda P) -> retraso fisiológico de ~0.12s en el nodo AV (segmento PR) para llenado ventricular -> conducción rápida His-Purkinje (QRS estrecho) -> sístole biventricular coordinada y onda T."
                 }
             },
             BRADY: {
-                id: "BRADY",
-                bpm: 45,
-                bpmRangeText: "45 BPM",
+                id: "BRADY", bpm: 45, bpmRangeText: "45 BPM",
                 badgeClass: "bg-sky-500/20 text-sky-300 border-sky-500/40",
-                dotColor: "bg-sky-400",
-                accentHex: "#38bdf8",
-                sv: 82,
-                ef: "65%",
-                prText: "0.18s (Normal AV Delay)",
-                qrsText: "0.08s Narrow | Elongated T-P",
+                dotColor: "bg-sky-400", accentHex: "#38bdf8", sv: 82, ef: "65%",
+                prText: "0.18s (Normal AV Delay)", qrsText: "0.08s Narrow | Elongated T-P",
                 en: {
-                    name: "Sinus Bradycardia",
-                    short: "Bradycardia • 45 BPM",
-                    statusBadge: "Sinus Bradycardia (<60 BPM)",
-                    categoryBadge: "Slow Sinus Automaticity",
+                    name: "Sinus Bradycardia", short: "Bradycardia • 45 BPM",
+                    statusBadge: "Sinus Bradycardia (<60 BPM)", categoryBadge: "Slow Sinus Automaticity",
                     note: "SA node fires slowly (~45 BPM) due to heightened vagal tone, athletic conditioning, or SA nodal disease. Conduction pathway and P-QRS-T morphology are identical to NSR, but the diastolic T-P interval is markedly prolonged with enhanced diastolic filling."
                 },
                 es: {
-                    name: "Bradicardia Sinusal",
-                    short: "Bradicardia • 45 LPM",
-                    statusBadge: "Bradicardia Sinusal (<60 LPM)",
-                    categoryBadge: "Automatismo Sinusal Lento",
+                    name: "Bradicardia Sinusal", short: "Bradicardia • 45 LPM",
+                    statusBadge: "Bradicardia Sinusal (<60 LPM)", categoryBadge: "Automatismo Sinusal Lento",
                     note: "El nodo SA dispara lentamente (~45 LPM) por tono vagal elevado, acondicionamiento atlético o disfunción sinusal. Morfología P-QRS-T idéntica al ritmo normal, pero con intervalo T-P diastólico alargado y pulso mecánico pausado."
                 }
             },
             TACHY: {
-                id: "TACHY",
-                bpm: 130,
-                bpmRangeText: "130 BPM",
+                id: "TACHY", bpm: 130, bpmRangeText: "130 BPM",
                 badgeClass: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-                dotColor: "bg-amber-400",
-                accentHex: "#fbbf24",
-                sv: 58,
-                ef: "55%",
-                prText: "0.13s (Sympathetic Accel)",
-                qrsText: "0.08s Narrow | Compressed T-P",
+                dotColor: "bg-amber-400", accentHex: "#fbbf24", sv: 58, ef: "55%",
+                prText: "0.13s (Sympathetic Accel)", qrsText: "0.08s Narrow | Compressed T-P",
                 en: {
-                    name: "Sinus Tachycardia",
-                    short: "Tachycardia • 130 BPM",
-                    statusBadge: "Sinus Tachycardia (>100 BPM)",
-                    categoryBadge: "Sympathetic Acceleration",
+                    name: "Sinus Tachycardia", short: "Tachycardia • 130 BPM",
+                    statusBadge: "Sinus Tachycardia (>100 BPM)", categoryBadge: "Sympathetic Acceleration",
                     note: "Rapid SA nodal firing (~130 BPM) driven by beta-1 sympathetic stimulation. P-T and T-P intervals are compressed; shortened diastolic filling time moderately reduces End-Diastolic Volume and Stroke Volume (~58 mL) with rapid, shallower ventricular contractions."
                 },
                 es: {
-                    name: "Taquicardia Sinusal",
-                    short: "Taquicardia • 130 LPM",
-                    statusBadge: "Taquicardia Sinusal (>100 LPM)",
-                    categoryBadge: "Aceleración Simpática",
+                    name: "Taquicardia Sinusal", short: "Taquicardia • 130 LPM",
+                    statusBadge: "Taquicardia Sinusal (>100 LPM)", categoryBadge: "Aceleración Simpática",
                     note: "Disparo rápido del nodo SA (~130 LPM) por estimulación simpática beta-1. Intervalos P-T comprimidos; el menor tiempo de llenado diastólico reduce ligeramente el volumen sistólico (~58 mL) con contracciones rápidas."
                 }
             },
             AFIB: {
-                id: "AFIB",
-                bpm: 125,
-                bpmRangeText: "110–140 BPM (Irregular)",
+                id: "AFIB", bpm: 125, bpmRangeText: "110–140 BPM (Irregular)",
                 badgeClass: "bg-purple-500/20 text-purple-300 border-purple-500/40",
-                dotColor: "bg-purple-400",
-                accentHex: "#c084fc",
-                sv: 48,
-                ef: "46%",
-                prText: "Absent P Waves (f-waves)",
-                qrsText: "0.08s Irregularly Irregular",
+                dotColor: "bg-purple-400", accentHex: "#c084fc", sv: 48, ef: "46%",
+                prText: "Absent P Waves (f-waves)", qrsText: "0.08s Irregularly Irregular",
                 en: {
-                    name: "Atrial Fibrillation (A-Fib)",
-                    short: "A-Fib • 110–140 BPM",
-                    statusBadge: "Atrial Dysrhythmia (A-Fib)",
-                    categoryBadge: "Chaotic Atrial Micro-Reentry",
+                    name: "Atrial Fibrillation (A-Fib)", short: "A-Fib • 110–140 BPM",
+                    statusBadge: "Atrial Dysrhythmia (A-Fib)", categoryBadge: "Chaotic Atrial Micro-Reentry",
                     note: "Multiple chaotic re-entrant wavelets (350–600/min) quiver across the atrial walls (originating near Pulmonary Vein ostia). Atria fail to contract synchronously (loss of 'atrial kick' & P waves; baseline fibrillatory 'f' noise). AV node filters impulses erratically, producing an 'irregularly irregular' narrow-QRS ventricular response."
                 },
                 es: {
-                    name: "Fibrilación Auricular (FA)",
-                    short: "Fib. Auricular • 110–140 LPM",
-                    statusBadge: "Disritmia Auricular (FA)",
-                    categoryBadge: "Micro-Reentrada Auricular Caótica",
+                    name: "Fibrilación Auricular (FA)", short: "Fib. Auricular • 110–140 LPM",
+                    statusBadge: "Disritmia Auricular (FA)", categoryBadge: "Micro-Reentrada Auricular Caótica",
                     note: "Múltiples micro-ondas caóticas hacen temblar las paredes auriculares sin contracción sincrónica (ausencia de ondas P, reemplazada por ondas 'f' fibrilatorias). El nodo AV conduce impulsos de forma errática generando una respuesta ventricular 'irregularmente irregular'."
                 }
             },
             VTACH: {
-                id: "VTACH",
-                bpm: 170,
-                bpmRangeText: "170 BPM",
+                id: "VTACH", bpm: 170, bpmRangeText: "170 BPM",
                 badgeClass: "bg-rose-500/20 text-rose-300 border-rose-500/40",
-                dotColor: "bg-rose-500",
-                accentHex: "#fb7185",
-                sv: 26,
-                ef: "24%",
-                prText: "AV Dissociation (Ectopic)",
-                qrsText: ">0.16s Wide Bizarre QRS",
+                dotColor: "bg-rose-500", accentHex: "#fb7185", sv: 26, ef: "24%",
+                prText: "AV Dissociation (Ectopic)", qrsText: ">0.16s Wide Bizarre QRS",
                 en: {
-                    name: "Ventricular Tachycardia (V-Tach)",
-                    short: "V-Tach • 170 BPM",
-                    statusBadge: "Malignant Ventricular Arrhythmia",
-                    categoryBadge: "Ectopic Ventricular Focus",
+                    name: "Ventricular Tachycardia (V-Tach)", short: "V-Tach • 170 BPM",
+                    statusBadge: "Malignant Ventricular Arrhythmia", categoryBadge: "Ectopic Ventricular Focus",
                     note: "Rapid regular tachycardia (~170 BPM) originating from an irritable re-entrant focus in the LV myocardium, bypassing normal SA/AV conduction. Slow cell-to-cell myocardial depolarization produces wide, bizarre QRS complexes with discordant T waves, AV dissociation, and severely impaired ventricular filling & output."
                 },
                 es: {
-                    name: "Taquicardia Ventricular (TV)",
-                    short: "Taq. Ventricular • 170 LPM",
-                    statusBadge: "Arritmia Ventricular Maligna",
-                    categoryBadge: "Foco Ectópico Ventricular",
+                    name: "Taquicardia Ventricular (TV)", short: "Taq. Ventricular • 170 LPM",
+                    statusBadge: "Arritmia Ventricular Maligna", categoryBadge: "Foco Ectópico Ventricular",
                     note: "Ritmo rápido y regular (~170 LPM) originado en un foco ectópico ventricular, omitiendo la conducción AV normal. Complejos QRS anchos y abigarrados, disociación AV y llenado ventricular gravemente reducido con bombeo ineficaz."
                 }
             },
             VFIB: {
-                id: "VFIB",
-                bpm: 0,
-                bpmRangeText: "0 BPM (Cardiac Arrest)",
+                id: "VFIB", bpm: 0, bpmRangeText: "0 BPM (Cardiac Arrest)",
                 badgeClass: "bg-red-600/30 text-red-200 border-red-500",
-                dotColor: "bg-red-500",
-                accentHex: "#ef4444",
-                sv: 0,
-                ef: "0% (Arrest)",
-                prText: "None (Chaotic Wavelets)",
-                qrsText: "No QRS | Zero Cardiac Output",
+                dotColor: "bg-red-500", accentHex: "#ef4444", sv: 0, ef: "0% (Arrest)",
+                prText: "None (Chaotic Wavelets)", qrsText: "No QRS | Zero Cardiac Output",
                 en: {
-                    name: "Ventricular Fibrillation (V-Fib)",
-                    short: "V-Fib • Cardiac Arrest",
-                    statusBadge: "CRITICAL: V-Fib / Cardiac Arrest",
-                    categoryBadge: "Lethal Disorganized Quivering",
+                    name: "Ventricular Fibrillation (V-Fib)", short: "V-Fib • Cardiac Arrest",
+                    statusBadge: "CRITICAL: V-Fib / Cardiac Arrest", categoryBadge: "Lethal Disorganized Quivering",
                     note: "MEDICAL EMERGENCY: Spiral wave breakup across the ventricles produces chaotic, asynchronous high-frequency electrical activity. No identifiable P, QRS, or T waves (erratic fibrillatory sine-wave baseline). Ventricles quiver without coordinated contraction -> zero stroke volume, loss of pulse, requires immediate defibrillation."
                 },
                 es: {
-                    name: "Fibrilación Ventricular (FV)",
-                    short: "Fib. Ventricular • Paro",
-                    statusBadge: "CRÍTICO: FV / Paro Cardíaco",
-                    categoryBadge: "Temblor Ventricular Letal",
+                    name: "Fibrilación Ventricular (FV)", short: "Fib. Ventricular • Paro",
+                    statusBadge: "CRÍTICO: FV / Paro Cardíaco", categoryBadge: "Temblor Ventricular Letal",
                     note: "EMERGENCIA MÉDICA: Actividad eléctrica caótica y desorganizada en los ventrículos sin complejos QRS distinguibles. El miocardio ventricular tiembla asincrónicamente con volumen sistólico CERO y ausencia de pulso. Requiere desfibrilación inmediata."
                 }
             }
@@ -909,7 +884,7 @@
     <script>
         /**
          * ============================================================================
-         * 3. GLOBAL SIMULATION STATE & MASTER TIMELINE
+         * 3. GLOBAL SIMULATION STATE & PROCEDURAL REAL-3D ORGANIC TEXTURE GENERATOR
          * ============================================================================
          */
         const simState = {
@@ -917,16 +892,17 @@
             isPlaying: true,
             speed: 1.0,
             rhythm: "NSR",
-            pendingRhythm: null,    // Queued rhythm for clean cycle-boundary switch
+            pendingRhythm: null,
             bpm: 72,
-            instBpm: 72,            // Instantaneous beat-to-beat BPM (varies in A-Fib)
-            currentBeatDuration: 60 / 72, // Seconds for active cardiac cycle
-            cyclePhase: 0.0,        // 0.0 to 1.0 normalized master clock within beat
-            elapsedTime: 0.0,       // Continuous master clock (seconds)
-            monitorMode: "scrolling", // 'scrolling' (Live ECG Strip) or 'wiggers'
+            instBpm: 72,
+            currentBeatDuration: 60 / 72,
+            cyclePhase: 0.0,
+            elapsedTime: 0.0,
+            monitorMode: "scrolling",
             selectedId: "SAN",
             hoveredId: null,
             autoDim: false,
+            real3DMode: false,      // Photorealistic Wet-Tissue PBR mode
             cutawayEnabled: true,
             cutawayDepth: 0.35,
             layers: {
@@ -934,36 +910,118 @@
                 conduction: true,
                 particles: true,
                 coronary: true,
-                pins: true
+                pins: true          // Controls all floating labels
             },
-            // Rolling buffer for continuous scrolling Lead II ECG & Hemodynamics (360 samples)
             traceBuffer: [],
             maxBufferSamples: 380
         };
 
         // --- THREE.JS GLOBALS ---
         let scene, camera, renderer, controls, heartRootGroup, clippingPlane;
+        let hemiLight, keyLight, rimLight, fillLight, surgicalSpotLight;
+        let myocardialBumpTexture = null;
+        let myocardialColorTexture = null;
+        let epicardialFatGroup = null;
         const selectableMeshes = [];
         const entityMeshMap = {};
         const pinElements = {};
 
-        // Anatomical & Conduction 3D Groups
-        let lvChamberGroup, rvChamberGroup, laChamberGroup, raChamberGroup, outerMyocardiumGroup;
+        let lvChamberGroup, rvChamberGroup, laChamberGroup, raChamberGroup, outerMyocardiumGroup, outerShellMeshRef;
         let mitralLeaflets = [], tricuspidLeaflets = [], aorticLeaflets = [], pulmonaryLeaflets = [];
         let papillaryMuscles = [], chordaeLines = [];
 
-        // Enhanced Conduction Visuals
         let saNodeMesh, avNodeMesh, vtachEctopicMesh;
         let atrialTractTubes = [], hisPurkinjeTubes = [], purkinjeBranchTubes = [];
-        let apPulseSpheres = [];       // Normal/Fast traveling wavefront spheres
-        let afibWaveletNodes = [];     // Chaotic atrial micro-reentry nodes
-        let vfibWaveletNodes = [];     // Chaotic ventricular fibrillation nodes
+        let apPulseSpheres = [];
+        let afibWaveletNodes = [];
+        let vfibWaveletNodes = [];
         let oxyParticleMesh, deoxyParticleMesh;
         let oxyParticleData = [], deoxyParticleData = [];
 
         const cameraTargetPos = new THREE.Vector3(0, 0.8, 10.5);
         const controlsTargetLook = new THREE.Vector3(0, 0.1, 0);
         let isCameraTweening = false;
+
+        /**
+         * Generates both a procedural organic myocardial fiber bump map AND a realistic
+         * organic muscle/subepicardial capillary color map for "Real 3D" mode.
+         */
+        function createProceduralRealHeartTextures() {
+            // 1. Bump Map (Myocardial Fiber Striations)
+            const bumpCanvas = document.createElement('canvas');
+            bumpCanvas.width = 512;
+            bumpCanvas.height = 512;
+            const bCtx = bumpCanvas.getContext('2d');
+
+            bCtx.fillStyle = '#808080';
+            bCtx.fillRect(0, 0, 512, 512);
+
+            for (let i = 0; i < 2600; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const len = 20 + Math.random() * 50;
+                const angle = -0.38 + (Math.random() - 0.5) * 0.24;
+                const lum = Math.floor(90 + Math.random() * 85);
+                bCtx.strokeStyle = `rgb(${lum},${lum},${lum})`;
+                bCtx.lineWidth = 0.8 + Math.random() * 1.9;
+                bCtx.beginPath();
+                bCtx.moveTo(x, y);
+                bCtx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+                bCtx.stroke();
+            }
+
+            const bumpTex = new THREE.CanvasTexture(bumpCanvas);
+            bumpTex.wrapS = THREE.RepeatWrapping;
+            bumpTex.wrapT = THREE.RepeatWrapping;
+            bumpTex.repeat.set(3, 3);
+
+            // 2. Organic Albedo Color Map (Deep crimson muscle fibers, subtle adipose mottling & micro-capillaries)
+            const colCanvas = document.createElement('canvas');
+            colCanvas.width = 512;
+            colCanvas.height = 512;
+            const cCtx = colCanvas.getContext('2d');
+
+            cCtx.fillStyle = '#a82430';
+            cCtx.fillRect(0, 0, 512, 512);
+
+            // Muscle bundles
+            for (let i = 0; i < 2000; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const len = 25 + Math.random() * 55;
+                const angle = -0.38 + (Math.random() - 0.5) * 0.22;
+                const r = Math.floor(135 + Math.random() * 65);
+                const g = Math.floor(22 + Math.random() * 25);
+                const b = Math.floor(30 + Math.random() * 28);
+                cCtx.strokeStyle = `rgba(${r},${g},${b},0.45)`;
+                cCtx.lineWidth = 1.2 + Math.random() * 2.2;
+                cCtx.beginPath();
+                cCtx.moveTo(x, y);
+                cCtx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+                cCtx.stroke();
+            }
+
+            // Subtle subepicardial yellowish adipose flecks along sulci
+            for (let i = 0; i < 65; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const rad = 6 + Math.random() * 18;
+                const grad = cCtx.createRadialGradient(x, y, 1, x, y, rad);
+                grad.addColorStop(0, 'rgba(235, 190, 95, 0.26)');
+                grad.addColorStop(1, 'rgba(168, 36, 48, 0)');
+                cCtx.fillStyle = grad;
+                cCtx.beginPath();
+                cCtx.arc(x, y, rad, 0, Math.PI * 2);
+                cCtx.fill();
+            }
+
+            const colTex = new THREE.CanvasTexture(colCanvas);
+            colTex.wrapS = THREE.RepeatWrapping;
+            colTex.wrapT = THREE.RepeatWrapping;
+            colTex.repeat.set(2, 2);
+
+            return { bumpTex, colTex };
+        }
 
         function initThreeScene() {
             const container = document.getElementById('canvas-container');
@@ -991,21 +1049,33 @@
             controls.addEventListener('start', () => { isCameraTweening = false; });
 
             clippingPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), simState.cutawayDepth);
+            const textures = createProceduralRealHeartTextures();
+            myocardialBumpTexture = textures.bumpTex;
+            myocardialColorTexture = textures.colTex;
 
-            // Studio Medical Lighting
-            scene.add(new THREE.HemisphereLight(0xdbeafe, 0x1e1b4b, 0.65));
-            const keyLight = new THREE.DirectionalLight(0xfff7ed, 1.35);
+            // Studio & Surgical Lighting
+            hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e1b4b, 0.65);
+            scene.add(hemiLight);
+
+            keyLight = new THREE.DirectionalLight(0xfff7ed, 1.35);
             keyLight.position.set(6, 9, 8);
             keyLight.castShadow = true;
             scene.add(keyLight);
 
-            const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.95);
+            rimLight = new THREE.DirectionalLight(0x38bdf8, 0.95);
             rimLight.position.set(-7, 5, -6);
             scene.add(rimLight);
 
-            const fillLight = new THREE.DirectionalLight(0xfda4af, 0.55);
+            fillLight = new THREE.DirectionalLight(0xfda4af, 0.55);
             fillLight.position.set(2, -7, 5);
             scene.add(fillLight);
+
+            // Overhead Surgical Operating Lamp (activated in Real 3D mode)
+            surgicalSpotLight = new THREE.SpotLight(0xfff1e6, 0.0);
+            surgicalSpotLight.position.set(2, 7, 9);
+            surgicalSpotLight.angle = Math.PI / 4;
+            surgicalSpotLight.penumbra = 0.55;
+            scene.add(surgicalSpotLight);
 
             const gridHelper = new THREE.GridHelper(16, 32, 0x1e293b, 0x0f172a);
             gridHelper.position.y = -3.6;
@@ -1022,11 +1092,15 @@
             initRaycasting();
         }
 
-        function registerAnatomicalMesh(mesh, id, clippable = false) {
+        function registerAnatomicalMesh(mesh, id, clippable = false, realColorHex = null, useMyocardialTex = false) {
             mesh.userData.anatomyId = id;
+            mesh.userData.schematicColor = mesh.material.color.clone();
+            mesh.userData.realColor = realColorHex ? new THREE.Color(realColorHex) : mesh.material.color.clone();
+            mesh.userData.useMyocardialTex = useMyocardialTex;
             mesh.userData.baseEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : new THREE.Color(0x000000);
             mesh.userData.baseOpacity = mesh.material.opacity !== undefined ? mesh.material.opacity : 1.0;
             mesh.userData.baseTransparent = mesh.material.transparent || false;
+            mesh.userData.baseRoughness = mesh.material.roughness !== undefined ? mesh.material.roughness : 0.38;
             mesh.userData.clippable = clippable;
 
             if (clippable && simState.cutawayEnabled) {
@@ -1074,11 +1148,43 @@
                 posAttr.setXYZ(i, x, y, z);
             }
             outerGeo.computeVertexNormals();
-            const outerShellMesh = new THREE.Mesh(outerGeo, epicardialMat);
-            outerShellMesh.position.set(0.05, -0.35, 0.05);
-            outerShellMesh.userData.clippable = true;
-            outerShellMesh.material.clippingPlanes = [clippingPlane];
-            outerMyocardiumGroup.add(outerShellMesh);
+            outerShellMeshRef = new THREE.Mesh(outerGeo, epicardialMat);
+            outerShellMeshRef.position.set(0.05, -0.35, 0.05);
+            outerShellMeshRef.userData.clippable = true;
+            outerShellMeshRef.material.clippingPlanes = [clippingPlane];
+            outerMyocardiumGroup.add(outerShellMeshRef);
+
+            // Subepicardial Adipose Tissue (Yellowish-gold fat pads along coronary/interventricular sulci — visible in Real 3D mode)
+            epicardialFatGroup = new THREE.Group();
+            epicardialFatGroup.visible = false;
+            const fatMat = new THREE.MeshPhysicalMaterial({
+                color: 0xeab308,
+                emissive: 0x422006,
+                emissiveIntensity: 0.25,
+                roughness: 0.18,
+                metalness: 0.02,
+                clearcoat: 0.95,
+                clearcoatRoughness: 0.08,
+                bumpMap: myocardialBumpTexture,
+                bumpScale: 0.025
+            });
+            const avSulcusFatCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-1.22, 0.25, 0.72),
+                new THREE.Vector3(-0.35, 0.32, 0.95),
+                new THREE.Vector3(0.45, 0.35, 0.85),
+                new THREE.Vector3(1.35, 0.22, 0.35)
+            ]);
+            const ivSulcusFatCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.24, 0.35, 0.82),
+                new THREE.Vector3(0.10, -0.45, 1.02),
+                new THREE.Vector3(0.28, -1.25, 0.84)
+            ]);
+            [avSulcusFatCurve, ivSulcusFatCurve].forEach(c => {
+                const fatMesh = new THREE.Mesh(new THREE.TubeGeometry(c, 28, 0.11, 12, false), fatMat);
+                fatMesh.scale.set(1.0, 0.65, 0.55);
+                epicardialFatGroup.add(fatMesh);
+            });
+            heartRootGroup.add(epicardialFatGroup);
             heartRootGroup.add(outerMyocardiumGroup);
 
             // 2. Interventricular Septum (IVS)
@@ -1092,7 +1198,7 @@
             const ivsGeo = new THREE.TubeGeometry(ivsCurve, 32, 0.24, 16, false);
             ivsGeo.scale(0.65, 1.0, 2.6);
             const ivsMesh = new THREE.Mesh(ivsGeo, ivsMat);
-            registerAnatomicalMesh(ivsMesh, "IVS", true);
+            registerAnatomicalMesh(ivsMesh, "IVS", true, 0x991b27, true);
             heartRootGroup.add(ivsMesh);
 
             // 3. Left Ventricle (LV)
@@ -1115,7 +1221,7 @@
             lvGeo.computeVertexNormals();
             const lvMesh = new THREE.Mesh(lvGeo, lvMat);
             lvMesh.position.set(0.75, -0.52, 0.0);
-            registerAnatomicalMesh(lvMesh, "LV", true);
+            registerAnatomicalMesh(lvMesh, "LV", true, 0xb82834, true);
             lvChamberGroup.add(lvMesh);
 
             const lvEndoMat = createTissueMaterial(0x881337, 0.5, 0.05, 1.0, true);
@@ -1123,11 +1229,11 @@
             lvRingGeo.rotateX(Math.PI / 2);
             const lvRingMesh = new THREE.Mesh(lvRingGeo, lvEndoMat);
             lvRingMesh.position.set(0.72, 0.12, 0.0);
-            registerAnatomicalMesh(lvRingMesh, "LV", true);
+            registerAnatomicalMesh(lvRingMesh, "LV", true, 0x8a1c24, true);
             lvChamberGroup.add(lvRingMesh);
             heartRootGroup.add(lvChamberGroup);
 
-            // 4. Right Ventricle (RV)
+            // 4. Right Ventricle (RV) — In Real 3D Mode, transitions from schematic blue to organic myocardial crimson
             rvChamberGroup = new THREE.Group();
             const rvMat = createTissueMaterial(0x2563eb, 0.38, 0.08, 0.86, true);
             const rvGeo = new THREE.SphereGeometry(1.12, 40, 40);
@@ -1147,7 +1253,7 @@
             rvGeo.computeVertexNormals();
             const rvMesh = new THREE.Mesh(rvGeo, rvMat);
             rvMesh.position.set(-0.72, -0.5, 0.22);
-            registerAnatomicalMesh(rvMesh, "RV", true);
+            registerAnatomicalMesh(rvMesh, "RV", true, 0xad2834, true);
             rvChamberGroup.add(rvMesh);
             heartRootGroup.add(rvChamberGroup);
 
@@ -1158,14 +1264,14 @@
             laGeo.scale(1.12, 0.88, 0.95);
             const laMesh = new THREE.Mesh(laGeo, laMat);
             laMesh.position.set(0.85, 0.85, -0.28);
-            registerAnatomicalMesh(laMesh, "LA", true);
+            registerAnatomicalMesh(laMesh, "LA", true, 0xc23846, true);
             laChamberGroup.add(laMesh);
 
             const laaGeo = new THREE.ConeGeometry(0.28, 0.65, 16);
             laaGeo.rotateZ(-Math.PI / 3);
             const laaMesh = new THREE.Mesh(laaGeo, laMat.clone());
             laaMesh.position.set(1.48, 0.95, 0.22);
-            registerAnatomicalMesh(laaMesh, "LA", true);
+            registerAnatomicalMesh(laaMesh, "LA", true, 0xc23846, true);
             laChamberGroup.add(laaMesh);
             heartRootGroup.add(laChamberGroup);
 
@@ -1176,7 +1282,7 @@
             raGeo.scale(1.05, 0.95, 0.95);
             const raMesh = new THREE.Mesh(raGeo, raMat);
             raMesh.position.set(-0.98, 0.72, 0.05);
-            registerAnatomicalMesh(raMesh, "RA", true);
+            registerAnatomicalMesh(raMesh, "RA", true, 0x992b3d, true);
             raChamberGroup.add(raMesh);
             heartRootGroup.add(raChamberGroup);
 
@@ -1194,7 +1300,7 @@
             mvGroup.position.set(0.68, 0.22, -0.05);
             const mvRing = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.045, 14, 32), annulusMat.clone());
             mvRing.rotation.x = Math.PI / 2; mvRing.rotation.y = -0.15;
-            registerAnatomicalMesh(mvRing, "MV", false);
+            registerAnatomicalMesh(mvRing, "MV", false, 0xfff8eb);
             mvGroup.add(mvRing);
             for (let i = 0; i < 2; i++) {
                 const pivot = new THREE.Group();
@@ -1204,7 +1310,7 @@
                 const cuspGeo = new THREE.CircleGeometry(0.32, 18, -Math.PI / 2.2, Math.PI / 1.1);
                 cuspGeo.rotateX(Math.PI / 2);
                 const cuspMesh = new THREE.Mesh(cuspGeo, leafletMat.clone());
-                registerAnatomicalMesh(cuspMesh, "MV", false);
+                registerAnatomicalMesh(cuspMesh, "MV", false, 0xfefae0);
                 pivot.add(cuspMesh);
                 mvGroup.add(pivot);
                 mitralLeaflets.push({ pivot });
@@ -1216,7 +1322,7 @@
             tvGroup.position.set(-0.68, 0.16, 0.22);
             const tvRing = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.045, 14, 32), annulusMat.clone());
             tvRing.rotation.x = Math.PI / 2; tvRing.rotation.y = 0.2;
-            registerAnatomicalMesh(tvRing, "TV", false);
+            registerAnatomicalMesh(tvRing, "TV", false, 0xfff8eb);
             tvGroup.add(tvRing);
             for (let i = 0; i < 3; i++) {
                 const pivot = new THREE.Group();
@@ -1226,7 +1332,7 @@
                 const cuspGeo = new THREE.CircleGeometry(0.31, 16, 0, Math.PI);
                 cuspGeo.rotateX(Math.PI / 2);
                 const cuspMesh = new THREE.Mesh(cuspGeo, leafletMat.clone());
-                registerAnatomicalMesh(cuspMesh, "TV", false);
+                registerAnatomicalMesh(cuspMesh, "TV", false, 0xfefae0);
                 pivot.add(cuspMesh);
                 tvGroup.add(pivot);
                 tricuspidLeaflets.push({ pivot });
@@ -1239,7 +1345,7 @@
             avGroup.rotation.z = -0.22;
             const avRing = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.04, 14, 28), annulusMat.clone());
             avRing.rotation.x = Math.PI / 2;
-            registerAnatomicalMesh(avRing, "AV", false);
+            registerAnatomicalMesh(avRing, "AV", false, 0xfff8eb);
             avGroup.add(avRing);
             for (let i = 0; i < 3; i++) {
                 const pivot = new THREE.Group();
@@ -1249,7 +1355,7 @@
                 const cuspGeo = new THREE.CircleGeometry(0.23, 14, 0, Math.PI);
                 cuspGeo.rotateX(Math.PI / 2);
                 const cuspMesh = new THREE.Mesh(cuspGeo, leafletMat.clone());
-                registerAnatomicalMesh(cuspMesh, "AV", false);
+                registerAnatomicalMesh(cuspMesh, "AV", false, 0xfefae0);
                 pivot.add(cuspMesh);
                 avGroup.add(pivot);
                 aorticLeaflets.push({ pivot });
@@ -1262,7 +1368,7 @@
             pvGroup.rotation.z = 0.2;
             const pvRing = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.04, 14, 28), annulusMat.clone());
             pvRing.rotation.x = Math.PI / 2;
-            registerAnatomicalMesh(pvRing, "PV", false);
+            registerAnatomicalMesh(pvRing, "PV", false, 0xfff8eb);
             pvGroup.add(pvRing);
             for (let i = 0; i < 3; i++) {
                 const pivot = new THREE.Group();
@@ -1272,7 +1378,7 @@
                 const cuspGeo = new THREE.CircleGeometry(0.23, 14, 0, Math.PI);
                 cuspGeo.rotateX(Math.PI / 2);
                 const cuspMesh = new THREE.Mesh(cuspGeo, leafletMat.clone());
-                registerAnatomicalMesh(cuspMesh, "PV", false);
+                registerAnatomicalMesh(cuspMesh, "PV", false, 0xfefae0);
                 pivot.add(cuspMesh);
                 pvGroup.add(pivot);
                 pulmonaryLeaflets.push({ pivot });
@@ -1295,7 +1401,7 @@
                 papMesh.position.copy(item.pos);
                 papMesh.lookAt(item.valveTarget);
                 papMesh.rotateX(Math.PI / 2);
-                registerAnatomicalMesh(papMesh, "PAP", false);
+                registerAnatomicalMesh(papMesh, "PAP", false, 0xb82e3a, true);
                 heartRootGroup.add(papMesh);
                 papillaryMuscles.push(papMesh);
 
@@ -1304,7 +1410,7 @@
                     const end = item.valveTarget.clone().add(new THREE.Vector3(s * 0.09, 0, s * 0.05));
                     const chordGeo = new THREE.TubeGeometry(new THREE.LineCurve3(start, end), 8, 0.014, 6, false);
                     const chordMesh = new THREE.Mesh(chordGeo, chordMat.clone());
-                    registerAnatomicalMesh(chordMesh, "PAP", false);
+                    registerAnatomicalMesh(chordMesh, "PAP", false, 0xfff8d6, false);
                     heartRootGroup.add(chordMesh);
                     chordaeLines.push(chordMesh);
                 }
@@ -1322,7 +1428,7 @@
                 new THREE.Vector3(-0.65, -0.8, -1.05)
             ]);
             const aortaMesh = new THREE.Mesh(new THREE.TubeGeometry(aortaCurve, 64, 0.34, 24, false), aortaMat);
-            registerAnatomicalMesh(aortaMesh, "AORTA", false);
+            registerAnatomicalMesh(aortaMesh, "AORTA", false, 0xd63849);
             heartRootGroup.add(aortaMesh);
 
             const archBranches = [
@@ -1332,7 +1438,7 @@
             ];
             archBranches.forEach(pts => {
                 const brMesh = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(pts[0], pts[1]), 12, 0.11, 14, false), aortaMat.clone());
-                registerAnatomicalMesh(brMesh, "AORTA", false);
+                registerAnatomicalMesh(brMesh, "AORTA", false, 0xd63849);
                 heartRootGroup.add(brMesh);
             });
 
@@ -1343,7 +1449,7 @@
                 new THREE.Vector3(-0.22, 1.72, 0.12)
             ]);
             const paTrunkMesh = new THREE.Mesh(new THREE.TubeGeometry(paTrunkCurve, 32, 0.3, 20, false), paMat);
-            registerAnatomicalMesh(paTrunkMesh, "PA", false);
+            registerAnatomicalMesh(paTrunkMesh, "PA", false, 0xa86478);
             heartRootGroup.add(paTrunkMesh);
 
             const lpaCurve = new THREE.CatmullRomCurve3([
@@ -1358,8 +1464,8 @@
             ]);
             const lpaMesh = new THREE.Mesh(new THREE.TubeGeometry(lpaCurve, 24, 0.22, 16, false), paMat.clone());
             const rpaMesh = new THREE.Mesh(new THREE.TubeGeometry(rpaCurve, 24, 0.22, 16, false), paMat.clone());
-            registerAnatomicalMesh(lpaMesh, "PA", false);
-            registerAnatomicalMesh(rpaMesh, "PA", false);
+            registerAnatomicalMesh(lpaMesh, "PA", false, 0xa86478);
+            registerAnatomicalMesh(rpaMesh, "PA", false, 0xa86478);
             heartRootGroup.add(lpaMesh);
             heartRootGroup.add(rpaMesh);
 
@@ -1376,8 +1482,8 @@
             ]);
             const svcMesh = new THREE.Mesh(new THREE.TubeGeometry(svcCurve, 28, 0.26, 20, false), vcMat);
             const ivcMesh = new THREE.Mesh(new THREE.TubeGeometry(ivcCurve, 28, 0.29, 20, false), vcMat.clone());
-            registerAnatomicalMesh(svcMesh, "VC", false);
-            registerAnatomicalMesh(ivcMesh, "VC", false);
+            registerAnatomicalMesh(svcMesh, "VC", false, 0x6e3554);
+            registerAnatomicalMesh(ivcMesh, "VC", false, 0x6e3554);
             heartRootGroup.add(svcMesh);
             heartRootGroup.add(ivcMesh);
 
@@ -1390,7 +1496,7 @@
             ];
             pvPaths.forEach(pts => {
                 const pvMesh = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(pts[0], pts[1]), 14, 0.13, 14, false), pvMat.clone());
-                registerAnatomicalMesh(pvMesh, "PVEINS", false);
+                registerAnatomicalMesh(pvMesh, "PVEINS", false, 0xc43c4a);
                 heartRootGroup.add(pvMesh);
             });
 
@@ -1416,7 +1522,7 @@
             ]);
             [ladCurve, diagCurve, lcxCurve, rcaCurve].forEach(curve => {
                 const cMesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 36, 0.048, 12, false), corMat.clone());
-                registerAnatomicalMesh(cMesh, "COR", false);
+                registerAnatomicalMesh(cMesh, "COR", false, 0xe6192e);
                 heartRootGroup.add(cMesh);
             });
         }
@@ -1456,7 +1562,6 @@
             registerAnatomicalMesh(saNodeMesh, "SAN", false);
             heartRootGroup.add(saNodeMesh);
 
-            // Internodal Tracts (Anterior, Middle, Posterior) + Bachmann's Bundle to LA
             const internodalCurves = [
                 new THREE.CatmullRomCurve3([
                     new THREE.Vector3(-1.12, 1.15, 0.25),
@@ -1516,13 +1621,11 @@
                 hisPurkinjeTubes.push({ mesh: m, curve: c });
             });
 
-            // 4. Subendocardial Purkinje Fiber Arborization (Fine branching across LV & RV walls)
+            // 4. Subendocardial Purkinje Fiber Arborization
             const purkinjeBranches = [
-                // LV Purkinje Arborizations
                 [new THREE.Vector3(0.45, -1.45, 0.12), new THREE.Vector3(0.75, -1.25, 0.42), new THREE.Vector3(1.12, -0.65, 0.45)],
                 [new THREE.Vector3(0.45, -1.45, 0.12), new THREE.Vector3(0.68, -1.32, -0.28), new THREE.Vector3(1.05, -0.58, -0.32)],
                 [new THREE.Vector3(0.88, -1.65, 0.12), new THREE.Vector3(1.22, -1.22, 0.05), new THREE.Vector3(1.32, -0.42, 0.08)],
-                // RV Purkinje Arborizations (Moderator band & free wall)
                 [new THREE.Vector3(-0.35, -1.42, 0.28), new THREE.Vector3(-0.68, -1.12, 0.55), new THREE.Vector3(-0.98, -0.45, 0.52)],
                 [new THREE.Vector3(-0.35, -1.42, 0.28), new THREE.Vector3(-0.72, -1.15, -0.08), new THREE.Vector3(-1.02, -0.48, -0.12)]
             ];
@@ -1534,7 +1637,7 @@
                 purkinjeBranchTubes.push({ mesh: m, curve: c });
             });
 
-            // 5. Traveling Action Potential Wavefront Spheres (8 spheres)
+            // 5. Traveling Action Potential Wavefront Spheres
             const pulseMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
             for (let i = 0; i < 8; i++) {
                 const s = new THREE.Mesh(new THREE.SphereGeometry(0.08, 14, 14), pulseMat.clone());
@@ -1543,7 +1646,7 @@
                 apPulseSpheres.push(s);
             }
 
-            // 6. Atrial Fibrillation (A-Fib) Micro-Reentrant Wavelet Nodes across RA & LA walls
+            // 6. A-Fib Micro-Reentrant Wavelet Nodes
             const afibPositions = [
                 new THREE.Vector3(-1.15, 0.92, 0.35), new THREE.Vector3(-0.85, 0.65, 0.42),
                 new THREE.Vector3(-1.25, 0.55, -0.15), new THREE.Vector3(-0.75, 1.05, -0.22),
@@ -1562,7 +1665,7 @@
                 afibWaveletNodes.push(ring);
             });
 
-            // 7. V-Tach Ectopic Ventricular Pacemaker Focus (Irritable Focus near LV Apex/Lateral Wall)
+            // 7. V-Tach Ectopic Ventricular Focus
             const vtachMat = new THREE.MeshStandardMaterial({
                 color: 0xf43f5e,
                 emissive: 0xe11d48,
@@ -1668,29 +1771,24 @@
             let avOpen = 0, slOpen = 0;
             let phaseLabel = "", ecgTag = "", phaseColor = "bg-emerald-400";
 
-            // ------------------------------------------------------------------------
-            // CASE 6: VENTRICULAR FIBRILLATION (V-FIB) — CHAOTIC ARREST
-            // ------------------------------------------------------------------------
             if (rhythmId === "VFIB") {
-                // Multi-frequency erratic sine wave progression (no P, QRS, or T waves)
                 ecg = 0.52 * Math.sin(elapsedSec * 23.0)
                     + 0.36 * Math.cos(elapsedSec * 37.5 + 0.8)
                     + 0.28 * Math.sin(elapsedSec * 53.0 + 1.9)
                     + 0.18 * Math.cos(elapsedSec * 14.2);
 
                 lvp = 14 + 3.5 * Math.sin(elapsedSec * 28.0);
-                aop = 32; // Decayed systemic arterial pressure in arrest
+                aop = 32;
                 lap = 14;
-                lvv = 115; // Dilated, unemptied ventricle
+                lvv = 115;
 
-                // Asynchronous high-frequency quivering with ZERO coordinated contraction
                 atrialScale = 1.0 + 0.025 * Math.sin(elapsedSec * 32.0);
                 ventScale = 1.0 + 0.038 * Math.sin(elapsedSec * 41.0);
                 ventTremorX = 0.045 * Math.cos(elapsedSec * 47.0);
                 ventTremorZ = 0.045 * Math.sin(elapsedSec * 39.0);
 
                 avOpen = 0.25;
-                slOpen = 0.0; // Aortic & Pulmonary valves remain closed
+                slOpen = 0.0;
                 phaseLabel = simState.lang === 'es' ? "Paro Fibrilatorio Ventricular" : "Chaotic Ventricular Fibrillation";
                 ecgTag = simState.lang === 'es' ? "Ondas Fibrilatorias Caóticas (Sin QRS)" : "Coarse V-Fib Baseline (No QRS)";
                 phaseColor = "bg-red-500";
@@ -1698,23 +1796,17 @@
                 return { ecg, lvp, aop, lap, lvv, atrialScale, ventScale, atrialTremorX, atrialTremorZ, ventTremorX, ventTremorZ, avOpen, slOpen, phaseLabel, ecgTag, phaseColor };
             }
 
-            // ------------------------------------------------------------------------
-            // CASE 5: VENTRICULAR TACHYCARDIA (V-TACH) — ECTOPIC WIDE-QRS TACHYCARDIA
-            // ------------------------------------------------------------------------
             if (rhythmId === "VTACH") {
-                // Wide, bizarre monomorphic QRS (occupying p = 0.05..0.52) + discordant inverted T wave
                 ecg = 1.38 * Math.exp(-Math.pow((p - 0.24) / 0.115, 2))
                     - 0.35 * Math.exp(-Math.pow((p - 0.08) / 0.045, 2))
-                    + 0.42 * Math.exp(-Math.pow((p - 0.36) / 0.065, 2)) // Notched wide QRS
-                    - 0.68 * Math.exp(-Math.pow((p - 0.68) / 0.13, 2)); // Discordant T-wave
+                    + 0.42 * Math.exp(-Math.pow((p - 0.36) / 0.065, 2))
+                    - 0.68 * Math.exp(-Math.pow((p - 0.68) / 0.13, 2));
 
-                // Reduced ventricular filling & hypotensive arterial pressure (90/58 mmHg)
                 if (p >= 0.12 && p < 0.52) {
                     const ej = (p - 0.12) / 0.40;
                     lvp = 15 + 75 * Math.sin(ej * Math.PI);
                     aop = Math.max(58, lvp - 3);
                     lvv = 85 - 26 * Math.sin(ej * (Math.PI / 2));
-                    // Shallow, rapid, dyssynchronous ventricular squeeze
                     ventScale = 0.96 - 0.095 * Math.sin(ej * Math.PI);
                     ventTremorX = 0.022 * Math.sin(ej * Math.PI * 2);
                     avOpen = 0.0;
@@ -1734,27 +1826,19 @@
                     phaseColor = "bg-amber-400";
                 }
 
-                // Decoupled Atria (AV Dissociation: atria beat independently at ~75 BPM using elapsedSec)
                 const indepAtrialPhase = (elapsedSec * (75 / 60)) % 1.0;
                 atrialScale = indepAtrialPhase < 0.15 ? 1.0 - 0.12 * Math.sin((indepAtrialPhase / 0.15) * Math.PI) : 0.97;
 
                 return { ecg, lvp, aop, lap, lvv, atrialScale, ventScale, atrialTremorX, atrialTremorZ, ventTremorX, ventTremorZ, avOpen, slOpen, phaseLabel, ecgTag, phaseColor };
             }
 
-            // ------------------------------------------------------------------------
-            // CASES 1, 2, 3, 4: SUPRAVENTRICULAR RHYTHMS (NSR, BRADY, TACHY, A-FIB)
-            // ------------------------------------------------------------------------
-            // Define phase windows scaled appropriately so T-P diastolic interval expands in Bradycardia
-            // and compresses in Tachycardia / A-Fib:
             let pWaveEnd = 0.10, prEnd = 0.18, qrsEnd = 0.25, systoleEnd = 0.48, tWaveEnd = 0.62;
-            let strokeAmplitude = 0.21; // Full ventricular contraction amplitude
+            let strokeAmplitude = 0.21;
 
             if (rhythmId === "BRADY") {
-                // Elongated T-P interval (electrical-mechanical systole occupies first 40% of 1.33s cycle)
                 pWaveEnd = 0.07; prEnd = 0.13; qrsEnd = 0.18; systoleEnd = 0.36; tWaveEnd = 0.46;
-                strokeAmplitude = 0.24; // Fuller preload
+                strokeAmplitude = 0.24;
             } else if (rhythmId === "TACHY") {
-                // Compressed P-T and T-P intervals; shallower ventricular filling
                 pWaveEnd = 0.14; prEnd = 0.24; qrsEnd = 0.33; systoleEnd = 0.64; tWaveEnd = 0.82;
                 strokeAmplitude = 0.145;
             } else if (rhythmId === "AFIB") {
@@ -1766,31 +1850,24 @@
             const qrsHalfWidth = (qrsEnd - prEnd) * 0.5;
             const tCenter = (systoleEnd + tWaveEnd) * 0.5;
 
-            // --- ECG SYNTHESIS ---
             if (rhythmId === "AFIB") {
-                // Baseline fibrillatory 'f' waves (350-600/min) + NO distinct P wave
                 const fNoise = 0.085 * Math.sin(elapsedSec * 39.0)
                              + 0.065 * Math.cos(elapsedSec * 61.0 + 1.1)
                              + 0.045 * Math.sin(elapsedSec * 89.0);
                 ecg += fNoise;
             } else {
-                // Distinct Sinus P-Wave
                 const pCenter = pWaveEnd * 0.52;
                 ecg += 0.28 * Math.exp(-Math.pow((p - pCenter) / (pWaveEnd * 0.28), 2));
             }
 
-            // Crisp Supraventricular QRS Complex (Q, R, S)
             ecg -= 0.20 * Math.exp(-Math.pow((p - (qrsCenter - qrsHalfWidth * 0.55)) / (qrsHalfWidth * 0.28), 2));
             ecg += 1.18 * Math.exp(-Math.pow((p - qrsCenter) / (qrsHalfWidth * 0.32), 2));
             ecg -= 0.30 * Math.exp(-Math.pow((p - (qrsCenter + qrsHalfWidth * 0.55)) / (qrsHalfWidth * 0.30), 2));
 
-            // T-Wave (Ventricular Repolarization)
             const tWidth = (tWaveEnd - systoleEnd) * 0.38;
             ecg += 0.38 * Math.exp(-Math.pow((p - tCenter) / tWidth, 2));
 
-            // --- ATRIAL MECHANICS ---
             if (rhythmId === "AFIB") {
-                // Atria do not contract synchronously; exhibit high-frequency micro-fibrillations
                 atrialScale = 1.02 + 0.018 * Math.sin(elapsedSec * 44.0);
                 atrialTremorX = 0.026 * Math.sin(elapsedSec * 52.0);
                 atrialTremorZ = 0.026 * Math.cos(elapsedSec * 48.0);
@@ -1802,14 +1879,12 @@
                 }
             }
 
-            // --- VENTRICULAR MECHANICS, VALVES & HEMODYNAMICS ---
             const baseEDV = rhythmId === "BRADY" ? 128 : (rhythmId === "TACHY" ? 102 : (rhythmId === "AFIB" ? 96 : 120));
             const rhythmSV = RHYTHM_PROFILES[rhythmId].sv;
             const baseESV = baseEDV - rhythmSV;
             const peakSysP = rhythmId === "AFIB" ? 106 : (rhythmId === "TACHY" ? 114 : 120);
 
             if (p < pWaveEnd && rhythmId !== "AFIB") {
-                // 1. P-Wave: SA Firing & Atrial Depolarization
                 ventScale = 1.0;
                 lvp = 8 + 4 * Math.sin((p / pWaveEnd) * Math.PI);
                 aop = 80;
@@ -1819,7 +1894,6 @@
                 ecgTag = simState.lang === 'es' ? "Onda P (Despol. Auricular)" : "P Wave (Atrial Depolarization)";
                 phaseColor = "bg-amber-400";
             } else if (p < prEnd) {
-                // 2. PR Segment: AV Nodal Conduction Delay (~0.12s in NSR)
                 ventScale = 1.01;
                 lvp = 10;
                 aop = 80;
@@ -1831,7 +1905,6 @@
                 ecgTag = rhythmId === "AFIB" ? "Baseline f-waves" : "PR Segment (AV Delay)";
                 phaseColor = "bg-sky-400";
             } else if (p < qrsEnd) {
-                // 3. QRS Complex: Rapid His-Purkinje Depolarization & Isovolumetric Contraction
                 const t = (p - prEnd) / (qrsEnd - prEnd);
                 ventScale = 1.02;
                 lvp = 10 + 72 * t;
@@ -1842,7 +1915,6 @@
                 ecgTag = simState.lang === 'es' ? "Complejo QRS (Sístole Ventricular)" : "QRS Complex (Ventricular Depol)";
                 phaseColor = "bg-rose-500";
             } else if (p < systoleEnd) {
-                // 4. ST Segment / Ventricular Systolic Ejection
                 const ej = (p - qrsEnd) / (systoleEnd - qrsEnd);
                 ventScale = 1.02 - strokeAmplitude * Math.sin(ej * (Math.PI / 2));
                 lvp = 82 + (peakSysP - 82) * Math.sin(ej * Math.PI);
@@ -1853,7 +1925,6 @@
                 ecgTag = simState.lang === 'es' ? "Segmento ST (Meseta Sistólica)" : "ST Segment (Systolic Ejection)";
                 phaseColor = "bg-red-500";
             } else if (p < tWaveEnd) {
-                // 5. T-Wave: Ventricular Repolarization & Early Relaxation
                 const rel = (p - systoleEnd) / (tWaveEnd - systoleEnd);
                 ventScale = (1.02 - strokeAmplitude) + strokeAmplitude * 0.35 * rel;
                 lvp = 82 * (1 - rel) + 7;
@@ -1865,7 +1936,6 @@
                 ecgTag = simState.lang === 'es' ? "Onda T (Repolarización)" : "T Wave (Ventricular Repolarization)";
                 phaseColor = "bg-emerald-400";
             } else {
-                // 6. T-P Interval: Diastolic Ventricular Filling & Diastasis
                 const fill = (p - tWaveEnd) / (1.0 - tWaveEnd);
                 const startScale = (1.02 - strokeAmplitude * 0.65);
                 ventScale = startScale + (1.0 - startScale) * Math.min(1.0, fill * 1.15);
@@ -1894,14 +1964,13 @@
 
         function computeNextBeatDuration(rhythmId) {
             if (rhythmId === "AFIB") {
-                // Irregularly irregular ventricular response (stochastic BPM between 105 and 148)
                 const randBpm = Math.round(105 + Math.random() * 43);
                 simState.instBpm = randBpm;
                 return 60.0 / randBpm;
             }
             if (rhythmId === "VFIB") {
                 simState.instBpm = 0;
-                return 0.65; // Arbitrary reference window for chaotic arrest
+                return 0.65;
             }
             const baseBpm = RHYTHM_PROFILES[rhythmId].bpm;
             simState.instBpm = baseBpm;
@@ -1913,10 +1982,8 @@
             simState.elapsedTime += scaledDt;
 
             if (simState.isPlaying) {
-                const prevPhase = simState.cyclePhase;
                 simState.cyclePhase += scaledDt / simState.currentBeatDuration;
 
-                // Cycle boundary reached -> handle seamless rhythm state transition or A-Fib RR update
                 if (simState.cyclePhase >= 1.0) {
                     simState.cyclePhase = simState.cyclePhase % 1.0;
                     if (simState.pendingRhythm) {
@@ -1935,7 +2002,6 @@
             const p = simState.cyclePhase;
             const kin = computeRhythmKinematicsAndSignals(r, p, simState.elapsedTime);
 
-            // Push sample to Live Scrolling ECG & Hemodynamic Oscilloscope Buffer
             if (simState.isPlaying) {
                 simState.traceBuffer.push({
                     ecg: kin.ecg,
@@ -1950,7 +2016,6 @@
                 }
             }
 
-            // 1. APPLY 3D CHAMBER CONTRACTION & TREMOR KINEMATICS
             laChamberGroup.scale.setScalar(kin.atrialScale);
             raChamberGroup.scale.setScalar(kin.atrialScale);
             laChamberGroup.position.set(kin.atrialTremorX, 0, kin.atrialTremorZ);
@@ -1967,19 +2032,16 @@
                 0.95 + (kin.ventScale - 0.9) * 0.5
             );
 
-            // 2. APPLY VALVE KINEMATICS
             mitralLeaflets.forEach(item => { item.pivot.rotation.z = THREE.MathUtils.lerp(item.pivot.rotation.z, -kin.avOpen, 0.3); });
             tricuspidLeaflets.forEach(item => { item.pivot.rotation.x = THREE.MathUtils.lerp(item.pivot.rotation.x, kin.avOpen, 0.3); });
             aorticLeaflets.forEach(item => { item.pivot.rotation.x = THREE.MathUtils.lerp(item.pivot.rotation.x, -kin.slOpen, 0.3); });
             pulmonaryLeaflets.forEach(item => { item.pivot.rotation.x = THREE.MathUtils.lerp(item.pivot.rotation.x, -kin.slOpen, 0.3); });
 
-            // 3. SYNCHRONIZE 3D CONDUCTION PATHWAYS WITH RHYTHM STATE
             update3DConductionVisuals(r, p, simState.elapsedTime);
 
-            // 4. UPDATE HEMODYNAMIC BLOOD PARTICLES
             let flowVelocity = 0.22;
             if (r === "VFIB") {
-                flowVelocity = 0.015 * Math.sin(simState.elapsedTime * 35.0); // Standstill / oscillation
+                flowVelocity = 0.015 * Math.sin(simState.elapsedTime * 35.0);
             } else if (r === "VTACH") {
                 flowVelocity = (p >= 0.15 && p < 0.48) ? 0.32 : 0.08;
             } else {
@@ -2010,7 +2072,6 @@
             deoxyParticleMesh.instanceMatrix.needsUpdate = true;
             oxyParticleMesh.instanceMatrix.needsUpdate = true;
 
-            // 5. UPDATE LIVE HUD TELEMETRY
             updateLiveHUD(kin);
         }
 
@@ -2023,14 +2084,12 @@
 
             if (!showCond) return;
 
-            // State-specific timing windows matching computeRhythmKinematicsAndSignals
             let pEnd = 0.10, prEnd = 0.18, qrsEnd = 0.25;
             if (rhythmId === "BRADY") { pEnd = 0.07; prEnd = 0.13; qrsEnd = 0.18; }
             else if (rhythmId === "TACHY") { pEnd = 0.14; prEnd = 0.24; qrsEnd = 0.33; }
             else if (rhythmId === "AFIB") { pEnd = 0.0; prEnd = 0.12; qrsEnd = 0.21; }
 
             if (rhythmId === "VFIB") {
-                // V-Fib: Dim normal SA/AV/His, flash chaotic ventricular wavelet nodes
                 saNodeMesh.material.emissiveIntensity = 0.25;
                 avNodeMesh.material.emissiveIntensity = 0.25;
                 atrialTractTubes.forEach(t => t.mesh.material.emissiveIntensity = 0.2);
@@ -2047,13 +2106,11 @@
             }
 
             if (rhythmId === "VTACH") {
-                // V-Tach: Flashing Ectopic LV Focus + Retrograde Purkinje activation + Independent background SA node
                 vtachEctopicMesh.visible = true;
                 const ectActive = p < 0.38;
                 vtachEctopicMesh.scale.setScalar(ectActive ? 1.45 + 0.25 * Math.sin(p * 30) : 0.95);
                 vtachEctopicMesh.material.emissiveIntensity = ectActive ? 3.2 : 0.8;
 
-                // Retrograde spread from LV apex up Purkinje/Bundle branches
                 purkinjeBranchTubes.forEach(t => t.mesh.material.emissiveIntensity = (p >= 0.04 && p < 0.32) ? 2.4 : 0.35);
                 hisPurkinjeTubes.forEach((t, idx) => {
                     const active = p >= 0.10 && p < 0.42;
@@ -2061,13 +2118,11 @@
                     if (active && apPulseSpheres[idx]) {
                         apPulseSpheres[idx].visible = true;
                         apPulseSpheres[idx].material.color.setHex(0xfb7185);
-                        // Retrograde direction (1.0 -> 0.0)
                         const revT = 1.0 - Math.min(1, Math.max(0, (p - 0.10) / 0.32));
                         apPulseSpheres[idx].position.copy(t.curve.getPointAt(revT));
                     }
                 });
 
-                // Background dissociated SA node
                 const saDissoc = ((elapsedSec * (75 / 60)) % 1.0) < 0.12;
                 saNodeMesh.material.emissiveIntensity = saDissoc ? 1.8 : 0.4;
                 avNodeMesh.material.emissiveIntensity = 0.3;
@@ -2075,7 +2130,6 @@
             }
 
             if (rhythmId === "AFIB") {
-                // A-Fib: Chaotic flickering atrial micro-reentry wavelets, variable AV node capture, normal His-Purkinje QRS
                 saNodeMesh.material.emissiveIntensity = 0.35;
                 atrialTractTubes.forEach((t, i) => {
                     t.mesh.material.emissiveIntensity = 0.4 + 1.2 * Math.abs(Math.sin(elapsedSec * 36.0 + i * 2.1));
@@ -2086,7 +2140,6 @@
                     n.scale.setScalar(s);
                 });
             } else {
-                // NSR, Bradycardia, Sinus Tachycardia: Clean SA Node -> Internodal Tracts
                 const saActive = p < pEnd;
                 saNodeMesh.material.emissiveIntensity = saActive ? 2.8 : 0.55;
                 saNodeMesh.scale.setScalar(saActive ? 1.42 : 1.0);
@@ -2103,12 +2156,10 @@
                 });
             }
 
-            // AV Node Delay Glow (during PR segment)
             const avActive = p >= pEnd * 0.7 && p <= prEnd;
             avNodeMesh.material.emissiveIntensity = avActive ? 2.8 : 0.55;
             avNodeMesh.scale.setScalar(avActive ? 1.4 : 1.0);
 
-            // His-Purkinje Rapid Ventricular Depolarization Wave (during QRS complex)
             const qrsActive = p >= prEnd && p <= qrsEnd * 1.12;
             const qrsFrac = Math.min(1, Math.max(0, (p - prEnd) / (qrsEnd - prEnd)));
 
@@ -2185,7 +2236,6 @@
         }
 
         function drawScrollingECGStrip(ctx, W, H) {
-            // 1. Clinical ECG Paper Grid (Minor & Major 5mm squares)
             ctx.strokeStyle = "rgba(16, 185, 129, 0.07)";
             ctx.lineWidth = 1;
             const minorStep = 14;
@@ -2203,11 +2253,10 @@
             const buf = simState.traceBuffer;
             if (buf.length < 2) return;
 
-            const drawWidth = W * 0.90; // Leave right 10% for live cursor & tags
+            const drawWidth = W * 0.90;
             const stepX = drawWidth / simState.maxBufferSamples;
             const startIdx = Math.max(0, simState.maxBufferSamples - buf.length);
 
-            // 2. Plot Aortic Pressure (Amber dashed) in upper track
             ctx.beginPath();
             ctx.strokeStyle = "rgba(251, 191, 36, 0.65)";
             ctx.lineWidth = 1.4;
@@ -2220,7 +2269,6 @@
             ctx.stroke();
             ctx.setLineDash([]);
 
-            // 3. Plot Left Ventricular Pressure (Rose) in upper track
             ctx.beginPath();
             ctx.strokeStyle = "rgba(251, 113, 133, 0.85)";
             ctx.lineWidth = 1.8;
@@ -2231,7 +2279,6 @@
             }
             ctx.stroke();
 
-            // 4. Plot Synchronized Live Lead II ECG Waveform in lower main track
             const ecgBaseY = H * 0.76;
             const ecgScaleY = H * 0.22;
 
@@ -2249,13 +2296,11 @@
             ctx.stroke();
             ctx.restore();
 
-            // 5. Active Drawing Cursor (1:1 Synchronized with Current Heart Phase)
             const lastSample = buf[buf.length - 1];
             const headX = (startIdx + buf.length - 1) * stepX;
             const headEcgY = ecgBaseY - lastSample.ecg * ecgScaleY;
             const headLvpY = H * 0.42 - (lastSample.lvp / 135) * (H * 0.34);
 
-            // Vertical sync scanline
             ctx.strokeStyle = "rgba(56, 189, 248, 0.5)";
             ctx.lineWidth = 1.5;
             ctx.beginPath();
@@ -2263,7 +2308,6 @@
             ctx.lineTo(headX, H);
             ctx.stroke();
 
-            // Glowing phosphor cursor on ECG tip
             ctx.fillStyle = "#ffffff";
             ctx.beginPath();
             ctx.arc(headX, headEcgY, 4.5, 0, Math.PI * 2);
@@ -2272,13 +2316,11 @@
             ctx.lineWidth = 2;
             ctx.stroke();
 
-            // LVP cursor dot
             ctx.fillStyle = "#fb7185";
             ctx.beginPath();
             ctx.arc(headX, headLvpY, 3.5, 0, Math.PI * 2);
             ctx.fill();
 
-            // Live Phase & Deflection Callout Pill next to cursor
             ctx.font = "600 10px 'JetBrains Mono', monospace";
             ctx.fillStyle = "#34d399";
             ctx.fillText(lastSample.ecgTag, Math.min(W - 185, headX + 10), Math.max(18, Math.min(H - 10, headEcgY + 4)));
@@ -2324,9 +2366,157 @@
     <script>
         /**
          * ============================================================================
-         * 8. UI CONTROLS, RHYTHM SWITCHER & BILINGUAL TRANSLATION ENGINE
+         * 8. LABELS SHOW/HIDE & REAL 3D PHOTOREALISTIC TISSUE MODE CONTROLLERS
          * ============================================================================
          */
+        function toggleLabelsVisibility(forceState) {
+            const nextState = typeof forceState === 'boolean' ? forceState : !simState.layers.pins;
+            simState.layers.pins = nextState;
+
+            // Hide or show the entire pins container
+            const pinsContainer = document.getElementById('pins-container');
+            pinsContainer.classList.toggle('hidden', !nextState);
+
+            // Sync checkbox in Layers tab
+            const checkbox = document.getElementById('toggle-pins');
+            if (checkbox) checkbox.checked = nextState;
+
+            // Sync Top Header Button
+            const headerBtn = document.getElementById('btn-toggle-labels');
+            const indicator = document.getElementById('labels-indicator');
+            const btnText = document.getElementById('lbl-pins-btn');
+            const isEs = simState.lang === 'es';
+
+            if (nextState) {
+                headerBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 transition flex items-center gap-1.5";
+                indicator.className = "w-2 h-2 rounded-full bg-sky-400 shadow-[0_0_6px_#38bdf8]";
+                btnText.textContent = isEs ? "Etiquetas: SI" : "Labels: ON";
+            } else {
+                headerBtn.className = "px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/90 hover:bg-slate-700 text-slate-400 border border-slate-700 transition flex items-center gap-1.5";
+                indicator.className = "w-2 h-2 rounded-full bg-slate-500";
+                btnText.textContent = isEs ? "Etiquetas: NO" : "Labels: OFF";
+            }
+
+            // Sync Quick Button in Left Drawer
+            const quickLblText = document.getElementById('quick-lbl-text');
+            if (quickLblText) {
+                quickLblText.textContent = nextState
+                    ? (isEs ? "Ocultar Etiquetas" : "Hide Labels")
+                    : (isEs ? "Mostrar Etiquetas" : "Show Labels");
+            }
+        }
+
+        function toggleReal3DMode(forceState) {
+            const isReal = typeof forceState === 'boolean' ? forceState : !simState.real3DMode;
+            simState.real3DMode = isReal;
+
+            const isEs = simState.lang === 'es';
+            const canvasContainer = document.getElementById('canvas-container');
+            canvasContainer.classList.toggle('real-3d-bg', isReal);
+
+            // Show/hide epicardial adipose fat pads in Real 3D mode
+            if (epicardialFatGroup) {
+                epicardialFatGroup.visible = isReal;
+            }
+
+            // Sync Header Button & Checkbox
+            const btnReal = document.getElementById('btn-real-3d');
+            const indReal = document.getElementById('real3d-indicator');
+            const lblReal = document.getElementById('lbl-real3d-btn');
+            const chkReal = document.getElementById('toggle-real3d-checkbox');
+            const quickBtnReal = document.getElementById('quick-btn-real3d');
+
+            if (chkReal) chkReal.checked = isReal;
+
+            if (isReal) {
+                btnReal.classList.add('real3d-active-btn');
+                if (quickBtnReal) quickBtnReal.classList.add('real3d-active-btn');
+                indReal.className = "w-2 h-2 rounded-full bg-rose-400 shadow-[0_0_8px_#fb7185] animate-pulse";
+                lblReal.textContent = isEs ? "Real 3D: SI" : "Real 3D: ON";
+            } else {
+                btnReal.classList.remove('real3d-active-btn');
+                if (quickBtnReal) quickBtnReal.classList.remove('real3d-active-btn');
+                indReal.className = "w-2 h-2 rounded-full bg-slate-500";
+                lblReal.textContent = isEs ? "Real 3D: NO" : "Real 3D: OFF";
+            }
+
+            // Update Studio vs. Surgical Theatre Lighting & Exposure
+            if (isReal) {
+                renderer.toneMappingExposure = 1.45;
+                hemiLight.color.setHex(0xffe4e6);
+                hemiLight.groundColor.setHex(0x2a0a10);
+                hemiLight.intensity = 0.78;
+                keyLight.color.setHex(0xfff5eb);
+                keyLight.intensity = 1.95;
+                rimLight.color.setHex(0xfda4af);
+                rimLight.intensity = 1.35;
+                surgicalSpotLight.intensity = 1.65;
+            } else {
+                renderer.toneMappingExposure = 1.15;
+                hemiLight.color.setHex(0xdbeafe);
+                hemiLight.groundColor.setHex(0x1e1b4b);
+                hemiLight.intensity = 0.65;
+                keyLight.color.setHex(0xfff7ed);
+                keyLight.intensity = 1.35;
+                rimLight.color.setHex(0x38bdf8);
+                rimLight.intensity = 0.95;
+                surgicalSpotLight.intensity = 0.0;
+            }
+
+            // Upgrade Exterior Epicardial Shell
+            if (outerShellMeshRef) {
+                const mat = outerShellMeshRef.material;
+                if (isReal) {
+                    mat.color.setHex(0xa82430);
+                    mat.map = myocardialColorTexture;
+                    mat.roughness = 0.14;
+                    mat.clearcoat = 1.0;
+                    mat.clearcoatRoughness = 0.06;
+                    mat.bumpMap = myocardialBumpTexture;
+                    mat.bumpScale = 0.05;
+                    mat.opacity = 0.68;
+                } else {
+                    mat.color.setHex(0x9f1239);
+                    mat.map = null;
+                    mat.roughness = 0.35;
+                    mat.clearcoat = 0.35;
+                    mat.clearcoatRoughness = 0.25;
+                    mat.bumpMap = null;
+                    mat.opacity = 0.38;
+                }
+                mat.needsUpdate = true;
+            }
+
+            // Upgrade all anatomical meshes between Schematic Atlas and Wet-Tissue PBR
+            selectableMeshes.forEach(mesh => {
+                const id = mesh.userData.anatomyId;
+                if (id === "SAN" || id === "AVN" || id === "HIS") return;
+
+                const mat = mesh.material;
+                if (isReal) {
+                    mat.color.copy(mesh.userData.realColor);
+                    mat.map = mesh.userData.useMyocardialTex ? myocardialColorTexture : null;
+                    mat.roughness = 0.12;
+                    mat.metalness = 0.05;
+                    mat.clearcoat = 1.0;
+                    mat.clearcoatRoughness = 0.06;
+                    mat.bumpMap = myocardialBumpTexture;
+                    mat.bumpScale = (id === "MV" || id === "TV" || id === "AV" || id === "PV") ? 0.012 : 0.042;
+                } else {
+                    mat.color.copy(mesh.userData.schematicColor);
+                    mat.map = null;
+                    mat.roughness = mesh.userData.baseRoughness;
+                    mat.metalness = 0.06;
+                    mat.clearcoat = 0.35;
+                    mat.clearcoatRoughness = 0.25;
+                    mat.bumpMap = null;
+                }
+                mat.needsUpdate = true;
+            });
+
+            refreshMeshHighlighting();
+        }
+
         function initRhythmSelectorUI() {
             const container = document.getElementById('rhythm-buttons-container');
             container.innerHTML = '';
@@ -2363,14 +2553,11 @@
         function selectRhythmState(newRhythmKey) {
             if (!RHYTHM_PROFILES[newRhythmKey]) return;
 
-            // If paused, or transitioning into/out of V-Fib arrest, or near cycle end, switch immediately
             if (!simState.isPlaying || newRhythmKey === "VFIB" || simState.rhythm === "VFIB" || simState.cyclePhase > 0.85) {
                 applyRhythmImmediately(newRhythmKey);
             } else {
-                // Queue smooth transition at the end of the current beat cycle
                 simState.pendingRhythm = newRhythmKey;
                 document.getElementById('pending-transition-badge').classList.remove('hidden');
-                // Highlight selected button immediately for responsive UX
                 highlightRhythmButton(newRhythmKey);
                 updateRhythmTelemetryCard(newRhythmKey);
             }
@@ -2388,7 +2575,6 @@
             highlightRhythmButton(rhythmKey);
             updateRhythmTelemetryCard(rhythmKey);
 
-            // Auto-focus camera on ectopic focus if V-Tach selected
             if (rhythmKey === "VTACH") {
                 selectAnatomicalStructure("HIS", false);
             } else if (rhythmKey === "AFIB") {
@@ -2435,7 +2621,7 @@
             const isEs = simState.lang === 'es';
 
             document.getElementById('tab-btn-rhythms').textContent = isEs ? 'Ritmos (6)' : 'Rhythms (6)';
-            document.getElementById('tab-btn-layers').textContent = isEs ? 'Capas 3D' : '3D Layers';
+            document.getElementById('tab-btn-layers').textContent = isEs ? '3D y Etiquetas' : '3D & Labels';
             document.getElementById('tab-btn-index').textContent = isEs ? 'Anatomía (18)' : 'Anatomy (18)';
             document.getElementById('lbl-select-rhythm').textContent = isEs ? 'Estado del Ritmo Cardíaco' : 'Cardiac Rhythm State';
             document.getElementById('lbl-current-phase').textContent = isEs ? 'Fase EP / Mecánica Activa' : 'Active EP / Mechanical Phase';
@@ -2443,12 +2629,11 @@
             document.getElementById('mode-btn-ecg').textContent = isEs ? 'Monitor ECG II en Vivo' : 'Live Lead II ECG Strip';
             document.getElementById('mode-btn-wiggers').textContent = isEs ? 'Ciclo Wiggers' : 'Cycle Phase Wiggers';
 
+            toggleLabelsVisibility(simState.layers.pins);
+            toggleReal3DMode(simState.real3DMode);
             initRhythmSelectorUI();
             initFloatingPins();
             selectAnatomicalStructure(simState.selectedId, false);
-            const languageUrl = new URL(window.location.href);
-            languageUrl.searchParams.set("lang", simState.lang);
-            window.history.replaceState(null, "", `${languageUrl.pathname}${languageUrl.search}${languageUrl.hash}`);
         }
 
         function setMonitorMode(mode) {
@@ -2670,23 +2855,23 @@
         function refreshMeshHighlighting() {
             selectableMeshes.forEach(mesh => {
                 const id = mesh.userData.anatomyId;
-                if (id === "SAN" || id === "AVN" || id === "HIS") return; // Preserve active conduction glow
+                if (id === "SAN" || id === "AVN" || id === "HIS") return;
                 const isSelected = (id === simState.selectedId);
                 const isHovered = (id === simState.hoveredId);
 
                 if (isSelected) {
-                    mesh.material.emissive = new THREE.Color(0x0284c7);
-                    mesh.material.emissiveIntensity = 0.5;
+                    mesh.material.emissive = new THREE.Color(simState.real3DMode ? 0x6b1220 : 0x0284c7);
+                    mesh.material.emissiveIntensity = simState.real3DMode ? 0.35 : 0.5;
                     mesh.material.opacity = 1.0;
                 } else if (isHovered) {
                     mesh.material.emissive = new THREE.Color(0x38bdf8);
                     mesh.material.emissiveIntensity = 0.4;
                 } else {
-                    mesh.material.emissive.copy(mesh.userData.baseEmissive);
-                    mesh.material.emissiveIntensity = 0.3;
+                    mesh.material.emissive = new THREE.Color(simState.real3DMode ? 0x3b0810 : mesh.userData.baseEmissive.getHex());
+                    mesh.material.emissiveIntensity = simState.real3DMode ? 0.28 : 0.3;
                     mesh.material.opacity = (simState.autoDim && simState.selectedId)
                         ? Math.min(mesh.userData.baseOpacity, 0.32)
-                        : mesh.userData.baseOpacity;
+                        : (simState.real3DMode ? 0.98 : mesh.userData.baseOpacity);
                 }
             });
         }
@@ -2727,6 +2912,10 @@
                 applyCutawayPlaneSettings();
             });
 
+            document.getElementById('toggle-real3d-checkbox').addEventListener('change', (e) => {
+                toggleReal3DMode(e.target.checked);
+            });
+
             document.getElementById('toggle-myocardium').addEventListener('change', (e) => {
                 simState.layers.myocardium = e.target.checked;
                 outerMyocardiumGroup.visible = e.target.checked;
@@ -2750,8 +2939,7 @@
                 if (entityMeshMap["COR"]) entityMeshMap["COR"].forEach(m => m.visible = e.target.checked);
             });
             document.getElementById('toggle-pins').addEventListener('change', (e) => {
-                simState.layers.pins = e.target.checked;
-                document.getElementById('pins-container').classList.toggle('hidden', !e.target.checked);
+                toggleLabelsVisibility(e.target.checked);
             });
 
             document.getElementById('slider-speed').addEventListener('input', (e) => {
@@ -2780,7 +2968,6 @@
             });
         }
 
-        // Pre-populate scrolling ECG trace buffer so oscilloscope starts full
         function prefillScrollingBuffer() {
             const dt = 0.016;
             for (let i = 0; i < 240; i++) {
@@ -2822,7 +3009,6 @@
             bindUIEvents();
             prefillScrollingBuffer();
             selectAnatomicalStructure("SAN", false);
-            if (new URLSearchParams(window.location.search).get("lang") === "es") toggleLanguage();
             lastFrameTime = performance.now();
             animateLoop(lastFrameTime);
         };
