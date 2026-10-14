@@ -1,6 +1,5 @@
 @echo off
 :: This opens the animated SVG in your default web browser
-start "" "loading.html"
 
 echo Initializing Git repository...
 git init
