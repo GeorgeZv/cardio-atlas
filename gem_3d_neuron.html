@@ -1,0 +1,2342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NeuroSim 3D — Cellular Neurophysiology, Action Potential & Synaptic Explorer</title>
+  <script defer src="./translations_es.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: dark;
+    }
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: radial-gradient(circle at 45% 40%, #0b1528 0%, #050914 65%, #020409 100%);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: #e2e8f0;
+    }
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .glass-panel {
+      background: rgba(8, 13, 26, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
+    }
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.4);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.5);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.75);
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 5px;
+      border-radius: 999px;
+      background: rgba(51, 65, 85, 0.85);
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #0f172a;
+      margin-top: -4.5px;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+    }
+    .pin-marker {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: auto;
+      cursor: pointer;
+      transition: transform 0.15s ease, opacity 0.2s ease, border-color 0.2s ease;
+      z-index: 15;
+    }
+    .pin-marker:hover {
+      transform: translate(-50%, -50%) scale(1.14);
+      z-index: 30;
+    }
+    .pin-marker.active-pin {
+      transform: translate(-50%, -50%) scale(1.18);
+      z-index: 35;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.85); opacity: 0.9; }
+      70% { transform: scale(1.85); opacity: 0; }
+      100% { transform: scale(1.85); opacity: 0; }
+    }
+    .ap-dot-pulse::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      border: 1.5px solid currentColor;
+      animation: pulse-ring 1.2s cubic-bezier(0.24, 0, 0.38, 1) infinite;
+    }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body class="w-screen h-screen overflow-hidden select-none">
+
+  <!-- 3D WebGL Viewport -->
+  <div id="canvas-container" class="fixed inset-0 z-0"></div>
+
+  <!-- 3D Floating Anatomical Pin Overlay -->
+  <div id="pins-container" class="fixed inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+  <!-- Hover Tooltip -->
+  <div id="hover-tooltip" class="fixed pointer-events-none z-50 hidden px-3 py-2 rounded-lg glass-panel border border-cyan-400/40 shadow-xl transition-opacity duration-75">
+    <div class="flex items-center gap-2">
+      <span id="tooltip-dot" class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+      <span id="tooltip-title" class="text-xs font-semibold text-white tracking-wide"></span>
+    </div>
+    <div id="tooltip-sub" class="text-[10px] italic text-slate-400 mt-0.5"></div>
+    <div class="text-[10px] font-mono-tech text-cyan-300 mt-1">Click to focus camera, open inset & inspect telemetry</div>
+  </div>
+
+  <!-- TOP TELEMETRY & BIOPHYSICS HEADER BAR -->
+  <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Brand & Context -->
+    <div class="glass-panel rounded-xl px-4 py-2.5 flex items-center gap-3.5 pointer-events-auto">
+      <div class="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500/25 to-amber-500/20 border border-cyan-500/40">
+        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-400 ap-dot-pulse text-amber-400"></span>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-bold tracking-tight text-white">NEUROSIM <span class="text-cyan-400 font-mono-tech text-xs">3D.v4</span></h1>
+          <span class="text-[10px] font-mono-tech uppercase px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">Hodgkin-Huxley & Synaptic Atlas</span>
+        </div>
+        <p class="text-[11px] text-slate-400">Multipolar Motor Neuron Electrophysiology, Saltatory Conduction & Quantal Neurotransmission</p>
+      </div>
+    </div>
+
+    <!-- Real-Time Electrophysiological Readouts -->
+    <div class="glass-panel rounded-xl px-4 py-2 flex items-center gap-5 pointer-events-auto">
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Electrophysiological State</div>
+        <div class="flex items-center gap-2 mt-0.5">
+          <span id="phase-indicator-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+          <span id="current-phase-name" class="text-xs font-bold text-white tracking-wide">Rapid Depolarization (Upstroke)</span>
+        </div>
+      </div>
+
+      <div class="h-7 w-px bg-slate-700/70"></div>
+
+      <div class="grid grid-cols-4 gap-4 text-center font-mono-tech">
+        <div>
+          <div class="text-[9px] text-slate-400 uppercase">Vm (Membrane)</div>
+          <div class="text-xs font-semibold text-amber-400"><span id="live-vm">+35</span> <span class="text-[10px] text-slate-400">mV</span></div>
+        </div>
+        <div>
+          <div class="text-[9px] text-slate-400 uppercase">gNa / gK</div>
+          <div class="text-xs font-semibold text-sky-400"><span id="live-gna">28.4</span> / <span id="live-gk" class="text-rose-400">1.8</span> <span class="text-[9px] text-slate-400">mS/cm²</span></div>
+        </div>
+        <div>
+          <div class="text-[9px] text-slate-400 uppercase">Velocity</div>
+          <div class="text-xs font-semibold text-emerald-400"><span id="live-velocity">85</span> <span class="text-[10px] text-slate-400">m/s</span></div>
+        </div>
+        <div>
+          <div class="text-[9px] text-slate-400 uppercase">Cleft [ACh]</div>
+          <div class="text-xs font-semibold text-green-400"><span id="live-nt">0.0</span> <span class="text-[10px] text-slate-400">mM</span></div>
+        </div>
+      </div>
+
+      <div class="h-7 w-px bg-slate-700/70 hidden sm:block"></div>
+
+      <div class="hidden sm:flex items-center gap-1.5">
+        <button id="btn-fire-ap" class="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold transition flex items-center gap-1.5" title="Trigger Action Potential at Axon Hillock">
+          <svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Stimulate Hillock
+        </button>
+        <button id="btn-reset-camera" class="px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-slate-600/50 text-xs font-medium transition flex items-center gap-1.5" title="Reset Camera & Clear Isolation (Esc)">
+          Reset View
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- LEFT PANEL: LAYER TOGGLES, CONDUCTION MODE & MICROSCOPIC ZOOM-IN INSET -->
+  <aside id="left-drawer" class="fixed top-20 left-3 bottom-48 z-20 w-80 flex flex-col gap-2.5 pointer-events-none">
+    <div class="glass-panel rounded-xl p-3.5 flex flex-col gap-3 pointer-events-auto overflow-y-auto max-h-full">
+
+      <!-- Layer Visibility & Mode Toggles -->
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-[11px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+            Layer Visibility & Mode Toggles
+          </h2>
+          <span class="text-[10px] font-mono-tech text-slate-400">6 Toggles</span>
+        </div>
+
+        <div class="space-y-1.5 text-xs">
+          <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/65 hover:bg-slate-800/70 border border-slate-800 cursor-pointer transition">
+            <span class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]"></span>
+              <span class="font-medium text-slate-200">Anatomy / Structural Soma</span>
+            </span>
+            <input type="checkbox" id="toggle-anatomy" checked class="accent-cyan-400 w-4 h-4 rounded cursor-pointer">
+          </label>
+
+          <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/65 hover:bg-slate-800/70 border border-slate-800 cursor-pointer transition">
+            <span class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-blue-500 to-rose-500"></span>
+              <span class="font-medium text-slate-200">Ion Flow (Na⁺ In / K⁺ Out)</span>
+            </span>
+            <input type="checkbox" id="toggle-ions" checked class="accent-cyan-400 w-4 h-4 rounded cursor-pointer">
+          </label>
+
+          <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/65 hover:bg-slate-800/70 border border-slate-800 cursor-pointer transition">
+            <span class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
+              <span class="font-medium text-slate-200">Action Potential Wavefront</span>
+            </span>
+            <input type="checkbox" id="toggle-ap" checked class="accent-cyan-400 w-4 h-4 rounded cursor-pointer">
+          </label>
+
+          <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/65 hover:bg-slate-800/70 border border-slate-800 cursor-pointer transition">
+            <span class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-200 shadow-[0_0_8px_#fde68a]"></span>
+              <span class="font-medium text-slate-200">Myelin Sheaths / Axon</span>
+            </span>
+            <input type="checkbox" id="toggle-myelin" checked class="accent-cyan-400 w-4 h-4 rounded cursor-pointer">
+          </label>
+
+          <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/65 hover:bg-slate-800/70 border border-slate-800 cursor-pointer transition">
+            <span class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]"></span>
+              <span class="font-medium text-slate-200">Synapse & Vesicle Release</span>
+            </span>
+            <input type="checkbox" id="toggle-synapse" checked class="accent-cyan-400 w-4 h-4 rounded cursor-pointer">
+          </label>
+
+          <label class="flex items-center justify-between p-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 cursor-pointer transition">
+            <span class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
+              <span class="font-semibold text-amber-200">Saltatory Conduction Jump</span>
+            </span>
+            <input type="checkbox" id="toggle-saltatory" checked class="accent-amber-400 w-4 h-4 rounded cursor-pointer">
+          </label>
+
+          <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/65 hover:bg-slate-800/70 border border-slate-800 cursor-pointer transition">
+            <span class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-purple-400"></span>
+              <span class="font-medium text-slate-200">3D Neuro-Anatomy Pins</span>
+            </span>
+            <input type="checkbox" id="toggle-pins" checked class="accent-cyan-400 w-4 h-4 rounded cursor-pointer">
+          </label>
+        </div>
+      </div>
+
+      <div class="h-px bg-slate-800"></div>
+
+      <!-- Microscopic Zoom-In Overlay (Live Interactive 2D/3D Bilayer & Synapse Inset) -->
+      <div class="flex flex-col gap-1.5">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Microscopic Zoom-In Inset</span>
+          <div class="flex bg-slate-900 p-0.5 rounded-md border border-slate-800 text-[10px] font-mono-tech">
+            <button id="btn-inset-membrane" class="px-2 py-0.5 rounded bg-cyan-500/25 text-cyan-300 font-semibold transition">Bilayer (Na⁺/K⁺)</button>
+            <button id="btn-inset-synapse" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition">Synaptic Cleft</button>
+          </div>
+        </div>
+        <div class="relative w-full h-44 rounded-xl bg-slate-950/90 border border-slate-700/80 overflow-hidden shadow-inner">
+          <canvas id="micro-inset-canvas" class="w-full h-full block"></canvas>
+          <div id="inset-caption" class="absolute bottom-1.5 left-2 right-2 flex items-center justify-between text-[9px] font-mono-tech text-slate-300 bg-slate-950/80 px-2 py-0.5 rounded border border-slate-800">
+            <span class="text-sky-400">● Na⁺ Influx (Blue)</span>
+            <span class="text-rose-400">● K⁺ Efflux (Red)</span>
+            <span id="inset-gate-state" class="text-amber-300">m³h Open</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="h-px bg-slate-800"></div>
+
+      <!-- Camera Focus Presets -->
+      <div>
+        <div class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Quick Camera Framing</div>
+        <div class="grid grid-cols-2 gap-1.5 text-[11px]">
+          <button data-preset="overview" class="preset-btn px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-cyan-500/20 border border-slate-700/70 text-slate-200 font-medium transition text-left">
+            Full Motor Neuron
+          </button>
+          <button data-preset="soma" class="preset-btn px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-cyan-500/20 border border-slate-700/70 text-slate-200 font-medium transition text-left">
+            Soma & Hillock
+          </button>
+          <button data-preset="node" class="preset-btn px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-cyan-500/20 border border-slate-700/70 text-slate-200 font-medium transition text-left">
+            Node of Ranvier
+          </button>
+          <button data-preset="synapse" class="preset-btn px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-cyan-500/20 border border-slate-700/70 text-slate-200 font-medium transition text-left">
+            Synaptic Terminal
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- RIGHT PANEL: COLLAPSIBLE NEURO-TELEMETRY HUD & ENTITY DIRECTORY -->
+  <aside id="right-drawer" class="fixed top-20 right-3 bottom-48 z-20 w-96 flex flex-col pointer-events-none transition-transform duration-300">
+    <div class="glass-panel rounded-xl flex flex-col h-full pointer-events-auto overflow-hidden">
+
+      <!-- Top Tabs -->
+      <div class="flex items-center justify-between border-b border-slate-800 px-3 pt-2.5 bg-slate-950/50">
+        <div class="flex gap-1">
+          <button id="tab-telemetry" class="px-3 py-1.5 text-xs font-semibold rounded-t-lg border-b-2 border-cyan-400 text-cyan-300 bg-cyan-500/10">
+            Neuro-Telemetry HUD
+          </button>
+          <button id="tab-directory" class="px-3 py-1.5 text-xs font-semibold rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200">
+            Structure Index (15)
+          </button>
+        </div>
+        <button id="btn-clear-selection" class="text-[11px] font-mono-tech text-slate-400 hover:text-amber-400 px-2 py-0.5 rounded bg-slate-800/70 border border-slate-700/60 transition">
+          Show All
+        </button>
+      </div>
+
+      <!-- TAB 1: TELEMETRY INSPECTOR CONTENT -->
+      <div id="panel-telemetry" class="p-4 overflow-y-auto flex-1 space-y-3.5">
+
+        <!-- 1. Header -->
+        <div class="p-3 rounded-xl bg-gradient-to-br from-slate-900/95 to-slate-900/50 border border-slate-700/60">
+          <div class="flex items-center justify-between gap-2">
+            <span id="hud-category" class="text-[10px] font-mono-tech uppercase tracking-wider px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+              Trigger Zone
+            </span>
+            <span id="hud-threshold-badge" class="text-[11px] font-mono-tech font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              Threshold: -55 mV
+            </span>
+          </div>
+          <h2 id="hud-title" class="text-lg font-bold text-white mt-1.5 leading-snug">Axon Hillock & Initial Segment (AIS)</h2>
+          <div id="hud-subtype" class="text-xs italic text-slate-400">Conus medullaris / Ankyrin-G Nav1.6 Cluster</div>
+          <div class="mt-2 pt-2 border-t border-slate-800/80 flex items-start gap-2 text-[11px]">
+            <span class="text-slate-400 font-medium shrink-0">Biochemistry:</span>
+            <span id="hud-biochem" class="text-emerald-300 font-medium">Highest density of voltage-gated Na⁺ channels (Nav1.6, ~1,000–2,000/µm²) anchored to spectrin-actin cytoskeleton via Ankyrin-G.</span>
+          </div>
+        </div>
+
+        <!-- 2. Active State Phase Correlation -->
+        <div class="p-3 rounded-xl bg-slate-900/70 border border-amber-500/30">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
+              Active State Phase Correlation
+            </span>
+            <span id="hud-live-phase-tag" class="text-[10px] font-mono-tech text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">Depolarization</span>
+          </div>
+          <p id="hud-phase-behavior" class="text-xs text-slate-200 leading-relaxed font-medium">
+            Summated EPSPs cross -55 mV threshold; Nav1.6 activation (m) gates snap open within 0.2 ms, driving explosive Na⁺ influx toward ENa (+60 mV).
+          </p>
+        </div>
+
+        <!-- 3. Biophysics & Electrophysiology -->
+        <div>
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-cyan-400 mb-2 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            Biophysics & Electrophysiology
+          </h3>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="p-2.5 rounded-lg bg-slate-900/75 border border-slate-800">
+              <div class="text-[10px] text-slate-400 uppercase">Electrical Status</div>
+              <div id="hud-electrical" class="text-xs font-mono-tech font-bold text-white mt-0.5">Vm: -70 → +40 mV | Vth: -55 mV</div>
+            </div>
+            <div class="p-2.5 rounded-lg bg-slate-900/75 border border-slate-800">
+              <div class="text-[10px] text-slate-400 uppercase">Conduction & Cable Specs</div>
+              <div id="hud-conduction" class="text-xs font-mono-tech font-bold text-cyan-300 mt-0.5">v = 80–120 m/s | λ = √(rm/ri)</div>
+            </div>
+          </div>
+          <div class="mt-2 p-2.5 rounded-lg bg-slate-900/75 border border-slate-800">
+            <div class="text-[10px] text-slate-400 uppercase">Channel Gating & Permeability Kinetics</div>
+            <div id="hud-kinetics" class="text-xs text-slate-200 mt-0.5 leading-relaxed">
+              Hodgkin-Huxley INa = gNa·m³·h·(Vm − ENa). Fast activation (m-gate) opens at -55 mV; ball-and-chain inactivation (h-gate) plugs pore at +35 mV.
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. Clinical Pearls & Pharmacology -->
+        <div class="space-y-2">
+          <h3 class="text-[11px] font-bold uppercase tracking-wider text-rose-400 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+            </svg>
+            Clinical Pearls & Neuropharmacology
+          </h3>
+          <div class="p-2.5 rounded-lg bg-slate-900/75 border border-slate-800">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold">Pathophysiology & Disease Correlations</div>
+            <div id="hud-clinical" class="text-xs text-slate-200 mt-0.5 leading-relaxed">
+              Mutations in SCN1A/SCN2A/SCN8A (Nav channels) at the AIS cause Dravet Syndrome & genetic generalized epilepsies due to impaired inhibitory interneuron firing or hyperexcitability.
+            </div>
+          </div>
+          <div class="p-2.5 rounded-lg bg-slate-900/75 border border-slate-800">
+            <div class="text-[10px] text-slate-400 uppercase font-semibold">Pharmacology & Neurotoxins</div>
+            <div id="hud-pharmacology" class="text-xs text-emerald-300 font-medium mt-0.5 leading-relaxed">
+              Carbamazepine, Phenytoin & Lamotrigine stabilize the inactivated (h-gate closed) state of Nav channels; Tetrodotoxin (TTX) plugs the outer selectivity filter pore.
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- TAB 2: STRUCTURE DIRECTORY LIST -->
+      <div id="panel-directory" class="p-3 overflow-y-auto flex-1 hidden space-y-2">
+        <div class="text-[11px] text-slate-400 px-1">Click any structure to smoothly focus the camera, isolate the region, and inspect its neurophysiology:</div>
+        <div id="directory-list" class="space-y-1.5"></div>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- BOTTOM-DOCKED MEMBRANE POTENTIAL OSCILLOSCOPE & TIMELINE CONTROLLER -->
+  <footer class="fixed bottom-3 left-3 right-3 z-30 h-44 pointer-events-none flex flex-col">
+    <div class="glass-panel rounded-xl flex-1 p-2.5 flex flex-col lg:flex-row gap-3 pointer-events-auto overflow-hidden">
+
+      <!-- Left Playback, Speed & Timeline Scrubbing Controls -->
+      <div class="w-full lg:w-64 shrink-0 flex flex-col justify-between border-b lg:border-b-0 lg:border-r border-slate-800 pr-0 lg:pr-3 pb-2 lg:pb-0">
+        <div>
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-bold uppercase tracking-wider text-cyan-400">AP Oscilloscope Control</span>
+            <span id="cycle-time-readout" class="text-[11px] font-mono-tech text-slate-300">t = 1.40 ms / 5.00 ms</span>
+          </div>
+
+          <!-- Play / Pause & Speed Buttons (0.1x, 0.5x, 1x) -->
+          <div class="flex items-center gap-1.5 mt-2">
+            <button id="btn-play-pause" class="px-3 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow-lg shadow-cyan-500/20">
+              <svg id="icon-pause" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+              </svg>
+              <svg id="icon-play" class="w-3.5 h-3.5 hidden" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+              <span id="play-pause-text">Pause</span>
+            </button>
+
+            <div class="flex bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 text-[11px] font-mono-tech">
+              <button data-speed="0.1" class="speed-btn px-2 py-1 rounded text-slate-400 hover:text-white transition">0.1x</button>
+              <button data-speed="0.5" class="speed-btn px-2 py-1 rounded text-slate-400 hover:text-white transition">0.5x</button>
+              <button data-speed="1.0" class="speed-btn px-2 py-1 rounded bg-cyan-500/25 text-cyan-300 font-semibold transition">1.0x</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scrubbing Slider -->
+        <div class="my-1">
+          <div class="flex justify-between text-[10px] text-slate-400 mb-0.5">
+            <span>Scrub AP Propagation & Phase</span>
+            <span id="phase-pct-label" class="font-mono-tech text-cyan-400">28%</span>
+          </div>
+          <input type="range" id="slider-scrub" min="0" max="1" step="0.002" value="0.28" class="w-full">
+        </div>
+
+        <!-- Stimulus Frequency / Conduction Info -->
+        <div class="flex items-center justify-between text-[10px] font-mono-tech text-slate-400 bg-slate-900/75 px-2.5 py-1.5 rounded-lg border border-slate-800">
+          <span>ENa: <strong class="text-sky-400">+60mV</strong></span>
+          <span>EK: <strong class="text-rose-400">-90mV</strong></span>
+          <span>Vr: <strong class="text-emerald-400">-70mV</strong></span>
+        </div>
+      </div>
+
+      <!-- Synchronized Multi-Trace Membrane Potential Oscilloscope Canvas -->
+      <div class="flex-1 relative flex flex-col min-w-0">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono-tech mb-1 px-1">
+          <div class="flex flex-wrap items-center gap-3">
+            <span class="flex items-center gap-1 text-amber-300"><span class="w-2.5 h-0.5 bg-amber-400 inline-block"></span>Membrane Potential Vm (mV)</span>
+            <span class="flex items-center gap-1 text-sky-400"><span class="w-2.5 h-0.5 bg-sky-400 inline-block"></span>Na⁺ Conductance (gNa)</span>
+            <span class="flex items-center gap-1 text-rose-400"><span class="w-2.5 h-0.5 bg-rose-500 inline-block"></span>K⁺ Conductance (gK)</span>
+            <span class="flex items-center gap-1 text-emerald-400"><span class="w-2.5 h-0.5 border-b border-dashed border-emerald-400 inline-block"></span>Threshold (-55 mV)</span>
+          </div>
+          <span class="text-slate-400 hidden xl:inline">Drag directly on oscilloscope graph to scrub Action Potential</span>
+        </div>
+
+        <div class="relative flex-1 w-full bg-slate-950/80 rounded-lg border border-slate-800/90 overflow-hidden">
+          <canvas id="oscilloscope-canvas" class="w-full h-full cursor-ew-resize block"></canvas>
+        </div>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- MAIN THREE.JS & NEUROPHYSIOLOGY SIMULATION SCRIPT -->
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ============================================================================
+    // 1. NEURO-TELEMETRY & BIOPHYSICS DATABASE (15 SELECTABLE ENTITIES)
+    // ============================================================================
+    const NEURO_DB = {
+      DENDRITES: {
+        id: 'DENDRITES',
+        name: 'Dendritic Arbor (Dendrites)',
+        subtype: 'Arbor dendritica — Input Integration Tree',
+        category: 'Cellular Structure',
+        threshold: 'Electrotonic Graded Potentials',
+        dotColor: 'bg-cyan-400',
+        insetMode: 'membrane',
+        biochem: 'Microtubule-associated protein 2 (MAP2) cytoskeleton; enriched in ligand-gated ionotropic receptors (AMPA, NMDA, GABAA) and hyperpolarization-activated HCN channels.',
+        electrical: 'Vm: -70 mV to -50 mV (EPSP) / -80 mV (IPSP)',
+        conduction: 'Passive Cable Decay: V(x) = V₀·e^(−x/λ) | 0.5–2 m/s',
+        kinetics: 'Spatial and temporal summation of postsynaptic potentials (EPSPs/IPSPs); high internal longitudinal resistance (ri) attenuates distal signals.',
+        clinical: 'Dendritic atrophy and loss of branching complexity in chronic stress, Alzheimer’s disease (amyloid-β synaptotoxicity), and schizophrenia.',
+        pharmacology: 'Benzodiazepines & Barbiturates potentiate dendritic/somatic GABAA Cl⁻ influx (shunting inhibition); Ketamine blocks dendritic NMDA receptors.',
+        pinPos: new THREE.Vector3(-6.9, 1.85, 0.5),
+        camPos: new THREE.Vector3(-8.5, 2.2, 5.2),
+        camTarget: new THREE.Vector3(-6.2, 0.8, 0.0),
+        phaseStatus: (p) => {
+          if (p < 0.14) return 'ACTIVE GRADED EPSP SUMMATION: Excitatory glutamatergic inputs depolarize the dendritic tree from -70 mV toward -55 mV, propagating electrotonically toward the soma.';
+          return 'Resting Membrane Integration (-70 mV): Continuously sampling baseline excitatory and inhibitory synaptic inputs.';
+        }
+      },
+      DENDRITIC_SPINES: {
+        id: 'DENDRITIC_SPINES',
+        name: 'Dendritic Spines (Mushroom & Stubby)',
+        subtype: 'Spinae dendriticae — Postsynaptic Micro-compartments',
+        category: 'Cellular Structure',
+        threshold: 'Ca²⁺ Compartmentalization',
+        dotColor: 'bg-teal-400',
+        insetMode: 'synapse',
+        biochem: 'Actin-rich head with Postsynaptic Density (PSD-95 scaffold), AMPA/NMDA glutamate receptors, and CaMKII molecular memory switches.',
+        electrical: 'Spine Neck Resistance (Rneck ~100–500 MΩ) isolates local depolarization',
+        conduction: 'Local Ca²⁺ transient (1–10 µM) triggers Long-Term Potentiation (LTP)',
+        kinetics: 'Depolarization expels extracellular Mg²⁺ block from NMDA receptors, permitting Ca²⁺ influx → CaMKII autophosphorylation → AMPA receptor exocytosis.',
+        clinical: 'Fragile X Syndrome (FMR1 CGG repeat expansion) causes dense, immature, elongated filopodial spines; spine loss in neurodegenerative dementias.',
+        pharmacology: 'Memantine (non-competitive NMDA antagonist used in Alzheimer’s disease) blocks excessive pathological extrasynaptic Ca²⁺ excitotoxicity.',
+        pinPos: new THREE.Vector3(-6.4, -1.65, 0.8),
+        camPos: new THREE.Vector3(-7.6, -1.5, 3.8),
+        camTarget: new THREE.Vector3(-6.2, -1.2, 0.4),
+        phaseStatus: (p) => {
+          if (p < 0.14) return 'NMDA Mg²⁺ UNBLOCKING & EPSP GENERATION: Local spine head depolarizes to -30 mV, admitting Ca²⁺ ions and driving current through the spine neck into the parent dendrite.';
+          return 'Baseline Synaptic Readiness: Extracellular Mg²⁺ plugs NMDA pore at -70 mV; AMPA receptors poised for quantal glutamate binding.';
+        }
+      },
+      SOMA: {
+        id: 'SOMA',
+        name: 'Soma (Perikaryon / Cell Body)',
+        subtype: 'Corpus neuroni — Metabolic & Integrative Center',
+        category: 'Cellular Structure',
+        threshold: 'Integrative Capacitance (Cm ~1 µF/cm²)',
+        dotColor: 'bg-sky-400',
+        insetMode: 'membrane',
+        biochem: 'Contains Rough ER (Nissl bodies for protein synthesis), Golgi apparatus, mitochondria (ATP for Na⁺/K⁺ pumps), and neurofilaments.',
+        electrical: 'Resting Potential Vr = -70 mV (set by K⁺ leak channels / K2P)',
+        conduction: 'Low Nav density (~50–75 channels/µm²); integrates dendritic currents',
+        kinetics: 'Goldman-Hodgkin-Katz (GHK) voltage equation governs resting Vm; high membrane area acts as an RC low-pass filter (τ = Rm·Cm ≈ 10–20 ms).',
+        clinical: 'Central chromatolysis (Nissl body dispersion & peripheral nucleus displacement) following axonal injury; Anterior horn motor soma degeneration in ALS & Polio.',
+        pharmacology: 'Tricyclic antidepressants & antiepileptics modulate somatic excitability; Colchicine disrupts microtubule fast anterograde axonal transport from soma.',
+        pinPos: new THREE.Vector3(-4.8, 1.35, 0.4),
+        camPos: new THREE.Vector3(-5.0, 1.6, 5.2),
+        camTarget: new THREE.Vector3(-4.8, 0.1, 0.0),
+        phaseStatus: (p) => {
+          if (p < 0.16) return 'SOMATIC SPATIAL-TEMPORAL SUMMATION: EPSP currents converge across the perikaryon membrane, charging somatic capacitance toward the -55 mV Axon Hillock threshold.';
+          if (p < 0.35) return 'Back-Propagating Action Potential (bAP): Depolarization wave echoes back into the soma, signaling nuclear gene transcription (c-Fos / CREB).';
+          return 'Metabolic Homeostasis (-70 mV): Mitochondria supplying ATP to somatic Na⁺/K⁺-ATPase pumps and synthesizing neurotransmitter precursors.';
+        }
+      },
+      NUCLEUS: {
+        id: 'NUCLEUS',
+        name: 'Neuronal Nucleus & Nucleolus',
+        subtype: 'Nucleus vesicularis — Euchromatic Transcriptional Hub',
+        category: 'Cellular Organelle',
+        threshold: 'CREB / c-Fos Activity-Dependent Transcription',
+        dotColor: 'bg-purple-400',
+        insetMode: 'membrane',
+        biochem: 'Large, pale euchromatic nucleus with prominent nucleolus (high rRNA synthesis for Nissl bodies) surrounded by a double nuclear envelope.',
+        electrical: 'Nuclear Ca²⁺ signaling via L-type Cav1.2 / calmodulin translocation',
+        conduction: 'mRNA export → Rough ER translation → Kinesin-1 fast axonal transport (400 mm/day)',
+        kinetics: 'Sustained action potential firing activates CaMKIV and MAPK/ERK cascades, phosphorylating CREB at Ser133 to transcribe BDNF, Arc, and ion channel subunits.',
+        clinical: 'Intranuclear polyglutamine (CAG) inclusions in Huntington’s Disease & Spinocerebellar Ataxias; TDP-43 nuclear-to-cytoplasmic mislocalization in ALS & FTD.',
+        pharmacology: 'Nusinersen & Risdiplam (SMN2 splicing modifiers) act inside motor neuron nuclei to treat Spinal Muscular Atrophy (SMA).',
+        pinPos: new THREE.Vector3(-4.8, 0.15, 0.0),
+        camPos: new THREE.Vector3(-4.8, 0.4, 3.4),
+        camTarget: new THREE.Vector3(-4.8, 0.0, 0.0),
+        phaseStatus: (p) => {
+          return 'Continuous Euchromatic Transcription: Synthesizing mRNA for voltage-gated ion channels, synaptic vesicle SNAREs, and cytoskeletal neurofilaments.';
+        }
+      },
+      AXON_HILLOCK: {
+        id: 'AXON_HILLOCK',
+        name: 'Axon Hillock & Initial Segment (AIS)',
+        subtype: 'Trigger Zone — Action Potential Initiation Site',
+        category: 'Conduction Trigger Zone',
+        threshold: 'Lowest Threshold: -55 mV (vs -40 mV in Soma)',
+        dotColor: 'bg-amber-400',
+        insetMode: 'membrane',
+        biochem: 'Ankyrin-G master scaffold tethers dense Nav1.6/Nav1.2 and Kv7 (KCNQ/M-current) channels; devoid of Nissl bodies (free of rough ER).',
+        electrical: 'Resting: -70 mV | Threshold: -55 mV | Peak Overshoot: +40 mV',
+        conduction: 'All-or-None Spike Initiation; orthodromic propagation down axon',
+        kinetics: 'Extreme Nav channel density (~2,000/µm²) produces maximum inward current density (−800 µA/cm²), ensuring action potentials fire here first.',
+        clinical: 'KCNQ2/KCNQ3 (Kv7) loss-of-function mutations at the AIS cause Benign Familial Neonatal Epilepsy; autoimmune anti-ankyrin-G/neurofascin neuropathies.',
+        pharmacology: 'Retigabine (Ezogabine) opens AIS Kv7 K⁺ channels to hyperpolarize the trigger zone; Phenytoin & Carbamazepine curb repetitive AIS firing.',
+        pinPos: new THREE.Vector3(-3.35, 0.45, 0.2),
+        camPos: new THREE.Vector3(-3.4, 0.9, 3.6),
+        camTarget: new THREE.Vector3(-3.3, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.08 && p < 0.22) return 'ALL-OR-NONE SPIKE INITIATION: Summated EPSP crosses -55 mV! Nav1.6 m-gates snap open in a positive Hodgkin cycle, launching the Action Potential (+40 mV).';
+          if (p >= 0.22 && p < 0.42) return 'REFRACTORY RESET: Nav h-gates inactivated and Kv channels open, preventing retrograde backfiring from the axon.';
+          return 'Trigger Zone Armed (-70 mV): Kv7 (M-channels) stabilize resting potential while awaiting threshold-crossing somatic depolarization.';
+        }
+      },
+      AXON: {
+        id: 'AXON',
+        name: 'Axon (Axolemma & Axoplasm)',
+        subtype: 'Axon — Myelinated Aα Motor Fiber',
+        category: 'Conduction Structure',
+        threshold: 'Space Constant λ ≈ 1.5–2.5 mm',
+        dotColor: 'bg-sky-400',
+        insetMode: 'membrane',
+        biochem: 'Uniformly oriented microtubules (+ end toward terminal) with Kinesin (anterograde) and Dynein (retrograde) motor proteins; Neurofilaments control axon caliber.',
+        electrical: 'Internodal Axoplasm: Low ri (internal resistance) due to large diameter (12–20 µm)',
+        conduction: 'Myelinated Aα: 80–120 m/s | Unmyelinated C-fiber: 0.5–2.0 m/s',
+        kinetics: 'Local circuit electrotonic current flows rapidly through low-resistance axoplasm between Nodes of Ranvier with minimal transmembrane leakage.',
+        clinical: 'Diffuse Axonal Injury (DAI) from traumatic shear forces; Wallerian degeneration distal to axotomy; Diabetic "dying-back" length-dependent axonal polyneuropathy.',
+        pharmacology: 'Vincristine & Paclitaxel (chemotherapeutics) disrupt axonal microtubules, causing peripheral neuropathy; Rabies & Tetanus toxins hijack retrograde dynein transport.',
+        pinPos: new THREE.Vector3(-0.2, -0.45, 0.25),
+        camPos: new THREE.Vector3(0.0, 0.8, 5.5),
+        camTarget: new THREE.Vector3(0.0, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.14 && p < 0.72) return 'FAST ELECTROTONIC AXOPLASMIC CURRENT: Depolarizing Na⁺ ions surge longitudinally through the low-resistance axoplasm to charge the next Node of Ranvier.';
+          return 'Resting Axoplasmic Transport (-70 mV): Kinesin motors ferrying synaptic vesicle precursors at 400 mm/day toward the presynaptic bouton.';
+        }
+      },
+      MYELIN_SHEATH: {
+        id: 'MYELIN_SHEATH',
+        name: 'Myelin Sheath (Internodes)',
+        subtype: 'Stratum myelini — Schwann Cell / Oligodendrocyte Lamellae',
+        category: 'Conduction Insulation',
+        threshold: '↑ Rm (×100) & ↓ Cm (÷100)',
+        dotColor: 'bg-amber-200',
+        insetMode: 'membrane',
+        biochem: '80% lipid (cerebrosides, sphingomyelin, cholesterol) & 20% protein (CNS: Myelin Basic Protein [MBP] & PLP; PNS: Protein Zero [P0] & PMP22).',
+        electrical: 'Prevents transmembrane charge leakage across internodal segments',
+        conduction: 'Decreases time constant τ = Rm·Cm and increases length constant λ = √(rm/ri)',
+        kinetics: 'Up to 100 concentric lipid bilayer wraps act as resistors in series (↑↑ Rm) and capacitors in series (↓↓ Cm), reducing charge needed to depolarize the internode.',
+        clinical: 'Multiple Sclerosis (CNS autoimmune demyelination of oligodendrocytes → conduction block, Uhthoff phenomenon); Guillain-Barré Syndrome & Charcot-Marie-Tooth (PMP22 duplication).',
+        pharmacology: 'Dalfampridine (4-Aminopyridine) blocks exposed internodal Kv channels in Multiple Sclerosis to restore action potential propagation across demyelinated plaques.',
+        pinPos: new THREE.Vector3(-1.35, 0.55, 0.35),
+        camPos: new THREE.Vector3(-1.3, 1.2, 4.2),
+        camTarget: new THREE.Vector3(-1.3, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.14 && p < 0.72) return 'CAPACITIVE INSULATION ACTIVE: Concentric lipid lamellae prevent current leak across the internode, forcing the Action Potential to jump via Saltatory Conduction.';
+          return 'High-Resistance Dielectric Shield: Conserving up to 99% of metabolic ATP by restricting ion flux exclusively to Nodes of Ranvier.';
+        }
+      },
+      NODES_OF_RANVIER: {
+        id: 'NODES_OF_RANVIER',
+        name: 'Nodes of Ranvier (Saltatory Repeater Stations)',
+        subtype: 'Nodi neurofibrae — Bare Axolemmal Gaps (~1–2 µm)',
+        category: 'Conduction Structure',
+        threshold: 'Saltatory Regeneration (-55 mV)',
+        dotColor: 'bg-amber-400',
+        insetMode: 'membrane',
+        biochem: 'Nodal axolemma packed with Nav1.6 channels (~1,500/µm²) flanked by paranodal Caspr/Contactin junctions and juxtaparanodal Kv1.1/Kv1.2 K⁺ channels.',
+        electrical: 'Regenerates full +40 mV Action Potential amplitude at each node',
+        conduction: 'Saltatory ("Jumping") Conduction: 80–120 m/s with minimal ATP expenditure',
+        kinetics: 'Passive electrotonic current from the upstream node depolarizes the nodal membrane past -55 mV, triggering a fresh Hodgkin-Huxley Na⁺ inward surge.',
+        clinical: 'Acute Motor Axonal Neuropathy (AMAN variant of Guillain-Barré): Anti-GM1/GD1a ganglioside antibodies attack nodal Nav clusters and paranodal loops after Campylobacter jejuni infection.',
+        pharmacology: 'Local Anesthetics (Lidocaine, Bupivacaine) must block at least 3 consecutive Nodes of Ranvier to completely halt saltatory action potential propagation.',
+        pinPos: new THREE.Vector3(0.0, 0.45, 0.25),
+        camPos: new THREE.Vector3(0.0, 0.7, 3.1),
+        camTarget: new THREE.Vector3(0.0, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.18 && p < 0.68) return 'SALTATORY REGENERATION FIRING: Nodal Nav1.6 channels open explosively as the saltatory pulse jumps from node to node, restoring full +40 mV spike amplitude.';
+          return 'Nodal Readiness (-70 mV): High-density Nav1.6 channels poised at the bare 1 µm axolemmal gap.';
+        }
+      },
+      PRESYNAPTIC_TERMINAL: {
+        id: 'PRESYNAPTIC_TERMINAL',
+        name: 'Presynaptic Terminal Bouton',
+        subtype: 'Terminatio presynaptica — Electro-Chemical Transducer',
+        category: 'Synaptic Structure',
+        threshold: 'P/Q & N-Type Cav2.1/2.2 Activation (-20 mV)',
+        dotColor: 'bg-emerald-400',
+        insetMode: 'synapse',
+        biochem: 'Contains Active Zones (Bassoon, Piccolo, RIM proteins), voltage-gated Ca²⁺ channels (Cav2.1/2.2), mitochondria, and high-affinity choline/monoamine reuptake transporters.',
+        electrical: 'Arrival of +40 mV AP opens voltage-gated Ca²⁺ channels ([Ca²⁺]i rises 100 nM → 50 µM)',
+        conduction: 'Synaptic Delay: 0.5 – 1.0 ms (rate-limiting step is Ca²⁺ influx & vesicle fusion)',
+        kinetics: 'Fourth-power cooperative relationship between Ca²⁺ entry and quantal release (Release ∝ [Ca²⁺]i⁴).',
+        clinical: 'Lambert-Eaton Myasthenic Syndrome (LEMS): Paraneoplastic autoantibodies (small cell lung cancer) attack presynaptic P/Q-type Cav2.1 channels → proximal weakness that improves with repeated use.',
+        pharmacology: 'ω-Conotoxin (cone snail) blocks N-type Cav2.2 channels (Ziconotide intrathecal analgesic); Pregabalin & Gabapentin bind α2δ subunit of presynaptic Ca²⁺ channels.',
+        pinPos: new THREE.Vector3(5.35, 0.95, 0.35),
+        camPos: new THREE.Vector3(5.2, 1.2, 3.8),
+        camTarget: new THREE.Vector3(5.6, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.68 && p < 0.88) return 'VOLTAGE-GATED Ca²⁺ INFLUX (Synaptic Delay ~0.5 ms): Action potential invades the bouton, opening Cav2.1/2.2 channels to trigger active-zone exocytosis!';
+          return 'Bouton Priming & Reuptake: Endocytosing clathrin-coated vesicles and refilling neurotransmitter stores via VMAT/VAChT proton gradients.';
+        }
+      },
+      SYNAPTIC_VESICLES: {
+        id: 'SYNAPTIC_VESICLES',
+        name: 'Synaptic Vesicles & SNARE Complex',
+        subtype: 'Vesiculae synapticae — Quantal Neurotransmitter Packets',
+        category: 'Synaptic Structure',
+        threshold: 'Synaptotagmin-1 Ca²⁺ Sensor Trigger',
+        dotColor: 'bg-green-400',
+        insetMode: 'synapse',
+        biochem: '40 nm lipid vesicles loaded via V-ATPase H⁺ pump + vesicular transporters; v-SNARE (Synaptobrevin/VAMP) zippers with t-SNAREs (Syntaxin-1 & SNAP-25).',
+        electrical: '1 Vesicle (Quantum) ≈ 5,000–10,000 Acetylcholine/Glutamate molecules → 0.5 mV MEPP',
+        conduction: 'Sub-millisecond pore fusion upon Ca²⁺ binding to Synaptotagmin C2A/C2B domains',
+        kinetics: 'Reserve pool tethered to synapsin-actin; Readily Releasable Pool (RRP) docked and primed by Munc13/Munc18 at active zones.',
+        clinical: 'Botulism (flaccid paralysis) vs. Tetanus (spastic paralysis / risus sardonicus): Clostridial zinc-endopeptidases cleave specific SNARE proteins.',
+        pharmacology: 'Botulinum Toxin A/E cleaves SNAP-25 (blocks ACh release); Tetanus Toxin cleaves Synaptobrevin in Renshaw inhibitory interneurons; Reserpine blocks VMAT; Levetiracetam binds SV2A.',
+        pinPos: new THREE.Vector3(5.65, 0.25, 0.45),
+        camPos: new THREE.Vector3(5.6, 0.5, 2.8),
+        camTarget: new THREE.Vector3(5.75, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.72 && p < 0.92) return 'SNARE ZIPPERING & QUANTAL EXOCYTOSIS: Ca²⁺ binds Synaptotagmin-1, driving Synaptobrevin + SNAP-25/Syntaxin fusion to release neurotransmitter into the cleft!';
+          return 'Docked & Primed at Active Zone: V-ATPase proton pumps and vesicular transporters packing ~7,000 neurotransmitter molecules per vesicle.';
+        }
+      },
+      SYNAPTIC_CLEFT: {
+        id: 'SYNAPTIC_CLEFT',
+        name: 'Synaptic Cleft (20–40 nm Extracellular Space)',
+        subtype: 'Fissura synaptica — Chemical Diffusion & Clearance Zone',
+        category: 'Synaptic Structure',
+        threshold: 'Peak [NT] ≈ 1–5 mM within 0.1 ms',
+        dotColor: 'bg-emerald-300',
+        insetMode: 'synapse',
+        biochem: '20 nm wide extracellular matrix spanned by trans-synaptic cell adhesion molecules (Neurexin-Neuroligin) and enzymatic Acetylcholinesterase (AChE) / astrocytic EAATs.',
+        electrical: 'Zero electrical coupling at chemical synapses (prevents retrograde current)',
+        conduction: 'Fick’s Law Diffusion Time: t ≈ x²/(2D) ≈ 0.05 ms across 20 nm cleft',
+        kinetics: 'Rapid clearance via enzymatic hydrolysis (AChE: 25,000 molecules/sec), presynaptic reuptake (SERT, DAT, NET), or astrocytic glutamate uptake (EAAT2/GLT-1).',
+        clinical: 'Organophosphate / Sarin nerve gas poisoning (irreversible AChE phosphorylation → DUMBELS cholinergic crisis); Glutamate clearance failure in ischemic stroke excitotoxicity.',
+        pharmacology: 'SSRIs (Fluoxetine), SNRIs & Cocaine block monoamine cleft reuptake; Pyridostigmine & Donepezil reversibly inhibit AChE; Pralidoxime (2-PAM) regenerates phosphorylated AChE.',
+        pinPos: new THREE.Vector3(6.25, -0.35, 0.25),
+        camPos: new THREE.Vector3(6.2, 0.2, 2.7),
+        camTarget: new THREE.Vector3(6.25, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.74 && p < 0.96) return 'NEUROTRANSMITTER DIFFUSION PLUME: Released transmitter molecules cross the 20 nm cleft in <50 µs, reaching millimolar concentration at postsynaptic receptors!';
+          return 'Enzymatic & Reuptake Clearance: AChE and high-affinity transporters rapidly resetting cleft concentration to baseline (<10 nM).';
+        }
+      },
+      POSTSYNAPTIC_MEMBRANE: {
+        id: 'POSTSYNAPTIC_MEMBRANE',
+        name: 'Postsynaptic Membrane & Receptor Density',
+        subtype: 'Membrana postsynaptica — Chemical-to-Electrical Transducer',
+        category: 'Synaptic Structure',
+        threshold: 'Reversal Potential Erev ≈ 0 mV (nAChR / AMPA)',
+        dotColor: 'bg-purple-400',
+        insetMode: 'synapse',
+        biochem: 'Pentameric Nicotinic ACh Receptors (α₂βδε) at neuromuscular junction or tetrameric AMPA/NMDA glutamate receptors anchored to PSD-95.',
+        electrical: 'Generates Excitatory Postsynaptic Potential (EPSP / End-Plate Potential ~15–40 mV)',
+        conduction: 'Ligand binding opens non-selective cation pore (Na⁺ influx >> K⁺ efflux)',
+        kinetics: 'Binding of 2 ACh molecules to α-subunits induces conformational twist of M2 transmembrane helices within 20 µs, opening a 0.65 nm hydrophilic pore.',
+        clinical: 'Myasthenia Gravis: Autoantibodies against postsynaptic nicotinic AChR (or MuSK) cause complement-mediated flattening of junctional folds & fatigable ptosis/bulbar weakness.',
+        pharmacology: 'Rocuronium & Vecuronium (competitive nAChR antagonists); Succinylcholine (depolarizing Phase I/II blocker); Strychnine (postsynaptic Glycine receptor antagonist).',
+        pinPos: new THREE.Vector3(6.85, 0.65, 0.35),
+        camPos: new THREE.Vector3(6.9, 0.7, 3.2),
+        camTarget: new THREE.Vector3(6.7, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.78 && p <= 1.0) return 'POSTSYNAPTIC RECEPTOR ACTIVATION (EPSP): Neurotransmitter binds ligand-gated channels, driving net Na⁺ influx to depolarize the target cell toward threshold!';
+          return 'Unliganded Closed Conformation (-70 mV): Postsynaptic receptors awaiting quantal transmitter release.';
+        }
+      },
+      NA_CHANNEL: {
+        id: 'NA_CHANNEL',
+        name: 'Voltage-Gated Sodium Channel (Nav1.6)',
+        subtype: 'Canalis natrii — Fast Depolarizing Upstroke Pore',
+        category: 'Ion Channel',
+        threshold: 'Activates at -55 mV | ENa = +60 mV',
+        dotColor: 'bg-blue-500',
+        insetMode: 'membrane',
+        biochem: 'Single α-subunit with 4 homologous domains (DI–DIV), each containing 6 transmembrane helices (S1–S6): S4 = positively charged voltage sensor (Arg/Lys); DIII–DIV loop = IFM inactivation gate.',
+        electrical: 'Peak gNa ≈ 30–40 mS/cm² (300× increase over resting permeability)',
+        conduction: 'INa = gNa · m³ · h · (Vm − 60 mV)',
+        kinetics: '3 States: Closed/Resting (m closed, h open at -70 mV) → Open/Activated (m open, h open at -55 to +35 mV) → Inactivated/Refractory (m open, IFM h-gate plugged at +35 mV).',
+        clinical: 'Absolute Refractory Period is caused strictly by Nav h-gate inactivation; Hyperkalemic/Hypokalemic Periodic Paralysis (SCN4A); Brugada Syndrome (SCN5A).',
+        pharmacology: 'Tetrodotoxin (TTX, pufferfish) & Saxitoxin (STX, red tide) plug outer pore (Site 1); Lidocaine binds inner S6 pore in open/inactivated state; Batrachotoxin locks Nav open.',
+        pinPos: new THREE.Vector3(-2.65, -0.52, 0.32),
+        camPos: new THREE.Vector3(-2.6, -0.3, 2.6),
+        camTarget: new THREE.Vector3(-2.65, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.12 && p < 0.28) return 'OPEN STATE (m³=1, h=1): S4 voltage sensors slide outward, opening activation gate! Blue Na⁺ ions rush into the axoplasm down their electrochemical gradient (+60 mV).';
+          if (p >= 0.28 && p < 0.56) return 'INACTIVATED STATE (h=0 — Absolute Refractory Period): Intracellular DIII-DIV ball-and-chain gate plugs the inner pore; channel cannot reopen until hyperpolarized!';
+          return 'CLOSED / DE-INACTIVATED STATE (m=0, h=1 at -70 mV): Activation gate closed, inactivation gate open and ready to fire upon next -55 mV threshold.';
+        }
+      },
+      K_CHANNEL: {
+        id: 'K_CHANNEL',
+        name: 'Voltage-Gated Potassium Channel (Kv1.1 / Delayed Rectifier)',
+        subtype: 'Canalis kalii — Repolarization & Hyperpolarization Pore',
+        category: 'Ion Channel',
+        threshold: 'Delayed Opening (~1 ms) | EK = -90 mV',
+        dotColor: 'bg-rose-500',
+        insetMode: 'membrane',
+        biochem: 'Tetramer of 4 identical α-subunits forming a central pore with the conserved TVGYG selectivity filter (strips hydration shell from K⁺ but rejects smaller Na⁺ ions).',
+        electrical: 'Peak gK ≈ 15–20 mS/cm² during Falling Phase & Afterhyperpolarization',
+        conduction: 'IK = gK · n⁴ · (Vm − (−90 mV))',
+        kinetics: 'Slow n⁴ activation kinetics: begins opening during depolarization, reaches peak conductance at +30 mV to drive rapid repolarization, and closes slowly (causing -80 mV undershoot).',
+        clinical: 'Episodic Ataxia Type 1 & Neuromyotonia (Isaac’s Syndrome — autoantibodies against juxtaparanodal Kv1.1/Kv1.2 channels causing continuous muscle fiber activity/myokymia).',
+        pharmacology: 'Tetraethylammonium (TEA) & 4-Aminopyridine (4-AP) block Kv channels, prolonging Action Potential duration; Dendrotoxin (mamba snake venom) blocks Kv1 channels.',
+        pinPos: new THREE.Vector3(0.0, -0.52, 0.32),
+        camPos: new THREE.Vector3(0.0, -0.3, 2.6),
+        camTarget: new THREE.Vector3(0.0, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.26 && p < 0.62) return 'OPEN DELAYED RECTIFIER STATE (n⁴=1): Red K⁺ ions efflux rapidly out of the neuron toward EK (-90 mV), repolarizing the membrane and creating the hyperpolarizing undershoot!';
+          return 'CLOSED STATE (n=0 at -70 mV): Delayed rectifier Kv gates closed; only background two-pore K2P leak channels remain open.';
+        }
+      },
+      NAK_PUMP: {
+        id: 'NAK_PUMP',
+        name: 'Na⁺/K⁺-ATPase Electrogenic Pump',
+        subtype: 'ATP1A3 — Primary Active Ionic Gradient Engine',
+        category: 'Ion Transporter',
+        threshold: '3 Na⁺ Out : 2 K⁺ In per 1 ATP Hydrolyzed',
+        dotColor: 'bg-purple-400',
+        insetMode: 'membrane',
+        biochem: 'P-type ATPase heterodimer (α catalytic subunit with Asp phosphorylation site + β glycoprotein subunit); consumes ~50–70% of total brain ATP!',
+        electrical: 'Direct electrogenic contribution: −3 to −5 mV to resting Vm; maintains [Na⁺]o=145/[Na⁺]i=12 mM & [K⁺]i=155/[K⁺]o=4 mM',
+        conduction: 'Turnover rate: ~150–200 cycles/sec per pump (~300 K⁺ in / 450 Na⁺ out per sec)',
+        kinetics: 'Ping-Pong E1/E2 conformational cycle: E1-ATP binds 3 intracellular Na⁺ → autophosphorylation to E2-P releases 3 Na⁺ outside → binds 2 extracellular K⁺ → dephosphorylation releases 2 K⁺ inside.',
+        clinical: 'Hypoxic-Ischemic Encephalopathy (stroke): ATP depletion halts Na⁺/K⁺ pump → cytotoxic edema (cellular swelling) & anoxic depolarization; ATP1A3 mutations cause Alternating Hemiplegia of Childhood.',
+        pharmacology: 'Ouabain & Digoxin (cardiac glycosides) bind the extracellular K⁺-binding site on the E2-P conformation, inhibiting the pump.',
+        pinPos: new THREE.Vector3(2.65, -0.52, 0.32),
+        camPos: new THREE.Vector3(2.6, -0.3, 2.6),
+        camTarget: new THREE.Vector3(2.65, 0.0, 0.0),
+        phaseStatus: (p) => {
+          if (p >= 0.48) return 'MAXIMAL ATP-DEPENDENT IONIC RECOVERY: Actively extruding 3 Na⁺ ions and importing 2 K⁺ ions per ATP to recharge transmembrane Nernst gradients after the spike!';
+          return 'Continuous Basal E1-E2 Pumping: Maintaining the steep Nernst potentials (ENa = +60 mV, EK = -90 mV) required for electrical excitability.';
+        }
+      }
+    };
+
+    // ============================================================================
+    // 2. HODGKIN-HUXLEY ACTION POTENTIAL & SYNAPTIC BIOPHYSICS ENGINE
+    // ============================================================================
+    // Evaluates local membrane voltage Vm(u), gNa(u), gK(u) for normalized wave phase u in [0, 1]
+    function evaluateLocalSpike(u) {
+      // u = 0..0.15: Resting (-70 mV)
+      // u = 0.15..0.24: EPSP foot to Threshold (-70 -> -55 mV)
+      // u = 0.24..0.34: Rapid Depolarization Upstroke (-55 -> +40 mV)
+      // u = 0.34..0.52: Repolarization Falling Phase (+40 -> -70 mV)
+      // u = 0.52..0.76: Afterhyperpolarization / Undershoot (-70 -> -82 -> -70 mV)
+      // u = 0.76..1.00: Resting Recovery (-70 mV)
+      let vm = -70;
+      let gNa = 0.05;
+      let gK = 0.5;
+      let gateState = 'Resting (m=0, h=1, n=0)';
+
+      if (u < 0.15) {
+        vm = -70;
+        gNa = 0.05;
+        gK = 0.5;
+        gateState = 'Resting (m=0, h=1)';
+      } else if (u < 0.24) {
+        const t = (u - 0.15) / 0.09;
+        vm = -70 + 15 * Math.pow(t, 1.4); // Foot up to -55 mV threshold
+        gNa = 0.05 + 2.5 * Math.pow(t, 2);
+        gK = 0.5 + 0.3 * t;
+        gateState = 'Threshold (-55mV): m-gate opening';
+      } else if (u < 0.34) {
+        const t = (u - 0.24) / 0.10;
+        vm = -55 + 95 * Math.sin(t * Math.PI * 0.5); // Upstroke to +40 mV
+        gNa = 2.5 + 32.5 * Math.sin(t * Math.PI * 0.65);
+        gK = 0.8 + 5.2 * Math.pow(t, 2);
+        gateState = 'Depolarization: m³h OPEN (Na⁺ In)';
+      } else if (u < 0.52) {
+        const t = (u - 0.34) / 0.18;
+        vm = 40 - 110 * (0.5 - 0.5 * Math.cos(t * Math.PI)); // +40 down to -70 mV
+        gNa = 28.0 * Math.exp(-t * 4.5);
+        gK = 6.0 + 14.0 * Math.sin(t * Math.PI * 0.75);
+        gateState = 'Repolarization: h INACTIVATED, n⁴ K⁺ Out';
+      } else if (u < 0.78) {
+        const t = (u - 0.52) / 0.26;
+        vm = -70 - 12 * Math.sin(t * Math.PI); // Hyperpolarizing undershoot to -82 mV
+        gNa = 0.05;
+        gK = 14.0 * Math.exp(-t * 2.8) + 0.5;
+        gateState = 'Hyperpolarization: Slow Kv tail + Na⁺/K⁺ Pump';
+      } else {
+        vm = -70;
+        gNa = 0.05;
+        gK = 0.5;
+        gateState = 'Resting State (-70 mV)';
+      }
+
+      return { vm, gNa, gK, gateState };
+    }
+
+    // Evaluates global timeline state for p in [0, 1] (5.0 ms total window)
+    function evaluateNeuronCycle(p, isSaltatory) {
+      const local = evaluateLocalSpike(p);
+      let phaseName = 'Resting Membrane Potential (-70 mV)';
+      let phaseTag = 'Resting';
+      let phaseColor = '#38bdf8';
+
+      if (p >= 0.08 && p < 0.20) {
+        phaseName = 'EPSP Summation & Threshold (-55 mV)';
+        phaseTag = 'Threshold';
+        phaseColor = '#fbbf24';
+      } else if (p >= 0.20 && p < 0.35) {
+        phaseName = 'Rapid Depolarization (Na⁺ Influx → +40 mV)';
+        phaseTag = 'Depolarization';
+        phaseColor = '#f59e0b';
+      } else if (p >= 0.35 && p < 0.52) {
+        phaseName = 'Repolarization & Absolute Refractory (K⁺ Efflux)';
+        phaseTag = 'Repolarization';
+        phaseColor = '#f43f5e';
+      } else if (p >= 0.52 && p < 0.74) {
+        phaseName = 'Hyperpolarization & Relative Refractory (-82 mV)';
+        phaseTag = 'Hyperpolarization';
+        phaseColor = '#a855f7';
+      } else if (p >= 0.74 && p <= 0.96) {
+        phaseName = 'Synaptic Delay, Ca²⁺ Influx & Quantal Exocytosis';
+        phaseTag = 'Synaptic Transmission';
+        phaseColor = '#10b981';
+      }
+
+      // Compute 3D Action Potential X-position along the neuron (-3.4 Hillock to +5.8 Terminal)
+      const startX = -3.4;
+      const endX = 5.8;
+      // Wave travels along axon during p in [0.12, 0.76]
+      const travelNorm = Math.max(0, Math.min(1, (p - 0.12) / 0.64));
+      let apX = startX + travelNorm * (endX - startX);
+
+      // Node of Ranvier X coordinates: [-2.65, 0.0, 2.65, 5.2]
+      const nodeXs = [-3.35, -2.65, 0.0, 2.65, 5.35];
+      if (isSaltatory && p >= 0.12 && p <= 0.76) {
+        // Snap/dwell slightly at Nodes of Ranvier and leap across myelinated internodes
+        const scaled = travelNorm * (nodeXs.length - 1);
+        const idx = Math.min(nodeXs.length - 2, Math.floor(scaled));
+        const frac = scaled - idx;
+        // Steep sigmoid jump between nodes
+        const jumpFrac = 1 / (1 + Math.exp(-14 * (frac - 0.5)));
+        apX = THREE.MathUtils.lerp(nodeXs[idx], nodeXs[idx + 1], jumpFrac);
+      }
+
+      // Neurotransmitter Cleft Concentration (mM) peaks when wave reaches terminal (p in 0.72..0.98)
+      let cleftNT = 0.0;
+      if (p >= 0.70 && p <= 0.98) {
+        const st = (p - 0.70) / 0.28;
+        cleftNT = 2.8 * Math.sin(st * Math.PI);
+      }
+
+      return {
+        ...local,
+        phaseName,
+        phaseTag,
+        phaseColor,
+        apX,
+        travelNorm,
+        cleftNT,
+        velocity: isSaltatory ? 95 : 2.4
+      };
+    }
+
+    // ============================================================================
+    // 3. THREE.JS SCENE, CAMERA, RENDERER & DISTANT NEURAL NETWORK BACKGROUND
+    // ============================================================================
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x030712, 0.028);
+
+    const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 120);
+    const DEFAULT_CAM_POS = new THREE.Vector3(0.0, 1.4, 14.5);
+    const DEFAULT_CAM_TARGET = new THREE.Vector3(0.0, 0.0, 0.0);
+    camera.position.copy(DEFAULT_CAM_POS);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    container.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance = 2.0;
+    controls.maxDistance = 24.0;
+    controls.target.copy(DEFAULT_CAM_TARGET);
+
+    // Cinematic Medical & Bioluminescent Lighting
+    const hemiLight = new THREE.HemisphereLight(0xe0f2fe, 0x0f172a, 0.9);
+    scene.add(hemiLight);
+
+    const keyLight = new THREE.DirectionalLight(0xfffbeb, 2.1);
+    keyLight.position.set(6, 10, 8);
+    scene.add(keyLight);
+
+    const rimLightCyan = new THREE.DirectionalLight(0x22d3ee, 1.65);
+    rimLightCyan.position.set(-10, 5, -7);
+    scene.add(rimLightCyan);
+
+    const rimLightViolet = new THREE.DirectionalLight(0xa855f7, 1.35);
+    rimLightViolet.position.set(8, -7, -6);
+    scene.add(rimLightViolet);
+
+    // Dynamic Point Light that travels with the Action Potential Wave
+    const apPointLight = new THREE.PointLight(0xfbbf24, 3.5, 5.5);
+    apPointLight.position.set(-3.4, 0, 0.5);
+    scene.add(apPointLight);
+
+    // Distant Neural Network Background Plexus
+    const bgNetworkGroup = new THREE.Group();
+    scene.add(bgNetworkGroup);
+    {
+      const bgNodeCount = 90;
+      const bgPts = [];
+      for (let i = 0; i < bgNodeCount; i++) {
+        bgPts.push(new THREE.Vector3(
+          (Math.random() - 0.5) * 42,
+          (Math.random() - 0.5) * 24,
+          -7 - Math.random() * 14
+        ));
+      }
+      const lineCoords = [];
+      for (let i = 0; i < bgNodeCount; i++) {
+        for (let j = i + 1; j < bgNodeCount; j++) {
+          if (bgPts[i].distanceTo(bgPts[j]) < 6.2) {
+            lineCoords.push(bgPts[i].x, bgPts[i].y, bgPts[i].z, bgPts[j].x, bgPts[j].y, bgPts[j].z);
+          }
+        }
+      }
+      const lineGeom = new THREE.BufferGeometry();
+      lineGeom.setAttribute('position', new THREE.Float32BufferAttribute(lineCoords, 3));
+      const lineMat = new THREE.LineBasicMaterial({ color: 0x1e3a8a, transparent: true, opacity: 0.22 });
+      bgNetworkGroup.add(new THREE.LineSegments(lineGeom, lineMat));
+    }
+
+    // Master Neuron Group & Layer Groups
+    const neuronRoot = new THREE.Group();
+    scene.add(neuronRoot);
+
+    const layerGroups = {
+      anatomy: new THREE.Group(),
+      myelin: new THREE.Group(),
+      ions: new THREE.Group(),
+      ap: new THREE.Group(),
+      synapse: new THREE.Group()
+    };
+    Object.values(layerGroups).forEach(g => neuronRoot.add(g));
+
+    const interactiveMeshes = [];
+    function registerEntityMesh(mesh, entityId) {
+      mesh.userData.entityId = entityId;
+      mesh.userData.baseEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : new THREE.Color(0x000000);
+      mesh.userData.baseEmissiveIntensity = mesh.material.emissiveIntensity || 0;
+      mesh.userData.baseOpacity = mesh.material.opacity !== undefined ? mesh.material.opacity : 1.0;
+      mesh.userData.wasTransparent = mesh.material.transparent || false;
+      interactiveMeshes.push(mesh);
+    }
+
+    // ============================================================================
+    // 4. PROCEDURAL 3D MULTIPOLAR MOTOR NEURON BUILDER
+    // ============================================================================
+
+    // 4.1 SOMA (Semi-transparent Cell Body at x = -4.8)
+    const somaGeom = new THREE.SphereGeometry(1.25, 48, 48);
+    const sPos = somaGeom.attributes.position;
+    for (let i = 0; i < sPos.count; i++) {
+      const vx = sPos.getX(i);
+      const vy = sPos.getY(i);
+      const vz = sPos.getZ(i);
+      // Taper right side (+X) toward Axon Hillock
+      let rx = vx;
+      let ry = vy;
+      let rz = vz;
+      if (vx > 0.2) {
+        const f = 1.0 - (vx - 0.2) * 0.28;
+        ry *= f;
+        rz *= f;
+        rx *= 1.15;
+      }
+      // Subtle organic multipolar bumps
+      const bump = 1.0 + 0.06 * Math.sin(vx * 4) * Math.cos(vy * 4);
+      sPos.setXYZ(i, rx * bump, ry * bump, rz * bump);
+    }
+    somaGeom.computeVertexNormals();
+
+    const somaMat = new THREE.MeshPhysicalMaterial({
+      color: 0x0ea5e9,
+      emissive: 0x082f49,
+      emissiveIntensity: 0.35,
+      roughness: 0.25,
+      metalness: 0.05,
+      clearcoat: 0.8,
+      transparent: true,
+      opacity: 0.44,
+      side: THREE.DoubleSide
+    });
+    const somaMesh = new THREE.Mesh(somaGeom, somaMat);
+    somaMesh.position.set(-4.8, 0, 0);
+    layerGroups.anatomy.add(somaMesh);
+    registerEntityMesh(somaMesh, 'SOMA');
+
+    // 4.2 NUCLEUS, NUCLEOLUS & ORGANELLES (Nissl Bodies & Mitochondria inside Soma)
+    const nucleusGeom = new THREE.SphereGeometry(0.52, 32, 32);
+    const nucleusMat = new THREE.MeshPhysicalMaterial({
+      color: 0x9333ea,
+      emissive: 0x581c87,
+      emissiveIntensity: 0.65,
+      roughness: 0.3,
+      clearcoat: 0.6,
+      transparent: true,
+      opacity: 0.88
+    });
+    const nucleusMesh = new THREE.Mesh(nucleusGeom, nucleusMat);
+    nucleusMesh.position.set(-4.85, 0.05, 0);
+    layerGroups.anatomy.add(nucleusMesh);
+    registerEntityMesh(nucleusMesh, 'NUCLEUS');
+
+    // Glowing Nucleolus inside Nucleus
+    const nucleolusMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.18, 20, 20),
+      new THREE.MeshBasicMaterial({ color: 0xf0abfc })
+    );
+    nucleolusMesh.position.set(-4.85, 0.08, 0.05);
+    layerGroups.anatomy.add(nucleolusMesh);
+
+    // Nissl Bodies (Rough ER stacks) & Somatic Mitochondria
+    const organelleMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0284c7,
+      emissiveIntensity: 0.45,
+      roughness: 0.4
+    });
+    for (let i = 0; i < 14; i++) {
+      const angle = (i / 14) * Math.PI * 2;
+      const rad = 0.72 + (i % 2) * 0.16;
+      const orgMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.16, 8, 12), organelleMat.clone());
+      orgMesh.position.set(
+        -4.85 + Math.cos(angle) * rad * 0.85,
+        Math.sin(angle) * rad,
+        (Math.sin(i * 2.3)) * 0.48
+      );
+      orgMesh.rotation.set(i, angle, i * 0.5);
+      layerGroups.anatomy.add(orgMesh);
+      registerEntityMesh(orgMesh, 'SOMA');
+    }
+
+    // 4.3 DENDRITES & DENDRITIC SPINES (Branching Arbor on Left of Soma)
+    const dendriteMat = new THREE.MeshPhysicalMaterial({
+      color: 0x06b6d4,
+      emissive: 0x083344,
+      emissiveIntensity: 0.3,
+      roughness: 0.35,
+      clearcoat: 0.5
+    });
+    const spineMat = new THREE.MeshStandardMaterial({
+      color: 0x2dd4bf,
+      emissive: 0x0f766e,
+      emissiveIntensity: 0.55,
+      roughness: 0.3
+    });
+
+    const dendriteBranches = [
+      [new THREE.Vector3(-5.6, 0.55, 0.2), new THREE.Vector3(-6.6, 1.45, 0.45), new THREE.Vector3(-7.7, 2.25, 0.7)],
+      [new THREE.Vector3(-6.6, 1.45, 0.45), new THREE.Vector3(-7.4, 1.15, 1.25)],
+      [new THREE.Vector3(-5.8, 0.15, -0.3), new THREE.Vector3(-7.0, 0.35, -0.85), new THREE.Vector3(-8.1, 0.75, -1.2)],
+      [new THREE.Vector3(-5.6, -0.60, 0.35), new THREE.Vector3(-6.5, -1.45, 0.75), new THREE.Vector3(-7.5, -2.15, 1.05)],
+      [new THREE.Vector3(-6.5, -1.45, 0.75), new THREE.Vector3(-7.3, -1.10, 1.45)],
+      [new THREE.Vector3(-5.5, 0.85, -0.35), new THREE.Vector3(-6.3, 1.85, -0.75), new THREE.Vector3(-7.1, 2.55, -1.1)],
+      [new THREE.Vector3(-5.5, -0.75, -0.45), new THREE.Vector3(-6.4, -1.65, -0.95), new THREE.Vector3(-7.4, -2.25, -1.3)]
+    ];
+
+    dendriteBranches.forEach((pts, bIdx) => {
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const radius = bIdx % 2 === 1 ? 0.065 : 0.11;
+      const tubeGeom = new THREE.TubeGeometry(curve, 24, radius, 14, false);
+      const mesh = new THREE.Mesh(tubeGeom, dendriteMat.clone());
+      layerGroups.anatomy.add(mesh);
+      registerEntityMesh(mesh, 'DENDRITES');
+
+      // Populate Mushroom Dendritic Spines along each dendrite
+      for (let s = 0.22; s <= 0.88; s += 0.22) {
+        const pt = curve.getPointAt(s);
+        const normalOffset = new THREE.Vector3(
+          Math.sin(s * 17 + bIdx) * 0.22,
+          Math.cos(s * 13 + bIdx) * 0.22,
+          Math.sin(s * 23) * 0.22
+        );
+        const headPos = pt.clone().add(normalOffset);
+        const neckCurve = new THREE.LineCurve3(pt, headPos);
+        const neckMesh = new THREE.Mesh(new THREE.TubeGeometry(neckCurve, 4, 0.018, 6, false), spineMat.clone());
+        const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.052, 12, 12), spineMat.clone());
+        headMesh.position.copy(headPos);
+        layerGroups.anatomy.add(neckMesh);
+        layerGroups.anatomy.add(headMesh);
+        registerEntityMesh(neckMesh, 'DENDRITIC_SPINES');
+        registerEntityMesh(headMesh, 'DENDRITIC_SPINES');
+      }
+    });
+
+    // 4.4 AXON HILLOCK & INITIAL SEGMENT (x = -3.75 to -2.95)
+    const hillockGeom = new THREE.ConeGeometry(0.46, 0.95, 28);
+    hillockGeom.rotateZ(-Math.PI / 2);
+    const hillockMat = new THREE.MeshPhysicalMaterial({
+      color: 0xf59e0b,
+      emissive: 0x78350f,
+      emissiveIntensity: 0.5,
+      roughness: 0.3,
+      clearcoat: 0.6,
+      transparent: true,
+      opacity: 0.85
+    });
+    const hillockMesh = new THREE.Mesh(hillockGeom, hillockMat);
+    hillockMesh.position.set(-3.45, 0, 0);
+    layerGroups.anatomy.add(hillockMesh);
+    registerEntityMesh(hillockMesh, 'AXON_HILLOCK');
+
+    // 4.5 EXTENDED AXON CORE (x = -3.1 to +5.2)
+    const axonCurve = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(-3.1, 0, 0),
+      new THREE.Vector3(-1.5, 0.04, 0),
+      new THREE.Vector3(0.0, -0.03, 0),
+      new THREE.Vector3(1.8, 0.03, 0),
+      new THREE.Vector3(3.8, -0.02, 0),
+      new THREE.Vector3(5.1, 0, 0)
+    ]);
+    const axonGeom = new THREE.TubeGeometry(axonCurve, 80, 0.16, 20, false);
+    const axonMat = new THREE.MeshPhysicalMaterial({
+      color: 0x38bdf8,
+      emissive: 0x0c4a6e,
+      emissiveIntensity: 0.35,
+      roughness: 0.3,
+      clearcoat: 0.5,
+      transparent: true,
+      opacity: 0.82
+    });
+    const axonMesh = new THREE.Mesh(axonGeom, axonMat);
+    layerGroups.anatomy.add(axonMesh);
+    registerEntityMesh(axonMesh, 'AXON');
+
+    // 4.6 MYELIN SHEATH INTERNODES & NODES OF RANVIER
+    // 3 Myelinated Internodes separated by bare Nodes of Ranvier at x = -2.65, 0.0, +2.65
+    const internodeCenters = [-1.32, 1.32, 3.92];
+    const myelinMat = new THREE.MeshPhysicalMaterial({
+      color: 0xfde68a,
+      emissive: 0x78350f,
+      emissiveIntensity: 0.25,
+      roughness: 0.25,
+      metalness: 0.05,
+      clearcoat: 0.85,
+      transparent: true,
+      opacity: 0.68
+    });
+
+    internodeCenters.forEach((cx) => {
+      const mGeom = new THREE.CapsuleGeometry(0.34, 1.65, 16, 28);
+      mGeom.rotateZ(Math.PI / 2);
+      const mMesh = new THREE.Mesh(mGeom, myelinMat.clone());
+      mMesh.position.set(cx, 0, 0);
+      layerGroups.myelin.add(mMesh);
+      registerEntityMesh(mMesh, 'MYELIN_SHEATH');
+    });
+
+    // Nodes of Ranvier & Transmembrane Ion Channel Complexes (Nav, Kv, Na+/K+ Pump)
+    const nodePositions = [-2.65, 0.0, 2.65];
+    const nodeRingMat = new THREE.MeshStandardMaterial({
+      color: 0xfbbf24,
+      emissive: 0xd97706,
+      emissiveIntensity: 0.75,
+      roughness: 0.25
+    });
+
+    const navChannelMeshes = [];
+    const kvChannelMeshes = [];
+    const pumpMeshes = [];
+
+    nodePositions.forEach((nx, idx) => {
+      // Exposed Nodal Axolemma Collar
+      const nodeRing = new THREE.Mesh(new THREE.TorusGeometry(0.19, 0.045, 16, 32), nodeRingMat.clone());
+      nodeRing.rotation.y = Math.PI / 2;
+      nodeRing.position.set(nx, 0, 0);
+      layerGroups.anatomy.add(nodeRing);
+      registerEntityMesh(nodeRing, 'NODES_OF_RANVIER');
+
+      // Ring of Transmembrane Ion Channels around the Node of Ranvier
+      for (let c = 0; c < 6; c++) {
+        const theta = (c / 6) * Math.PI * 2;
+        const cy = Math.cos(theta) * 0.24;
+        const cz = Math.sin(theta) * 0.24;
+
+        // Blue Voltage-Gated Na+ Channel (Nav1.6)
+        const navMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.045, 0.045, 0.14, 12),
+          new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x1d4ed8, emissiveIntensity: 0.6 })
+        );
+        navMesh.position.set(nx - 0.08, cy, cz);
+        navMesh.rotation.x = theta;
+        layerGroups.anatomy.add(navMesh);
+        registerEntityMesh(navMesh, 'NA_CHANNEL');
+        navChannelMeshes.push({ mesh: navMesh, nodeX: nx });
+
+        // Red Voltage-Gated K+ Channel (Kv1.1)
+        const kvMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.045, 0.045, 0.14, 12),
+          new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0xbe123c, emissiveIntensity: 0.6 })
+        );
+        kvMesh.position.set(nx + 0.08, cy, cz);
+        kvMesh.rotation.x = theta;
+        layerGroups.anatomy.add(kvMesh);
+        registerEntityMesh(kvMesh, 'K_CHANNEL');
+        kvChannelMeshes.push({ mesh: kvMesh, nodeX: nx });
+      }
+
+      // Purple Na+/K+-ATPase Pump Complex
+      const pumpMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.16, 0.12),
+        new THREE.MeshStandardMaterial({ color: 0xa855f7, emissive: 0x6b21a8, emissiveIntensity: 0.7 })
+      );
+      pumpMesh.position.set(nx, -0.26, 0.12);
+      layerGroups.anatomy.add(pumpMesh);
+      registerEntityMesh(pumpMesh, 'NAK_PUMP');
+      pumpMeshes.push(pumpMesh);
+    });
+
+    // 4.7 SYNAPTIC TERMINAL BOUTON, VESICLES, CLEFT & POSTSYNAPTIC MEMBRANE (x = +5.1 to +7.1)
+    // Presynaptic Bouton Bulb (Semi-transparent so internal vesicles are visible)
+    const boutonGeom = new THREE.SphereGeometry(0.75, 36, 36);
+    boutonGeom.scale(1.15, 0.92, 0.92);
+    const boutonMat = new THREE.MeshPhysicalMaterial({
+      color: 0x10b981,
+      emissive: 0x064e3b,
+      emissiveIntensity: 0.35,
+      roughness: 0.25,
+      clearcoat: 0.75,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide
+    });
+    const boutonMesh = new THREE.Mesh(boutonGeom, boutonMat);
+    boutonMesh.position.set(5.45, 0, 0);
+    layerGroups.synapse.add(boutonMesh);
+    registerEntityMesh(boutonMesh, 'PRESYNAPTIC_TERMINAL');
+
+    // Synaptic Vesicles inside Bouton (Animate toward active zone at x = 6.1)
+    const vesicleMat = new THREE.MeshPhysicalMaterial({
+      color: 0x4ade80,
+      emissive: 0x16a34a,
+      emissiveIntensity: 0.75,
+      roughness: 0.2,
+      clearcoat: 0.6
+    });
+    const synapticVesicles = [];
+    for (let v = 0; v < 14; v++) {
+      const vMesh = new THREE.Mesh(new THREE.SphereGeometry(0.095, 16, 16), vesicleMat.clone());
+      const basePos = new THREE.Vector3(
+        5.15 + (v % 4) * 0.22,
+        (Math.sin(v * 1.9)) * 0.36,
+        (Math.cos(v * 2.4)) * 0.36
+      );
+      vMesh.position.copy(basePos);
+      layerGroups.synapse.add(vMesh);
+      registerEntityMesh(vMesh, 'SYNAPTIC_VESICLES');
+      synapticVesicles.push({ mesh: vMesh, basePos, phaseOffset: v * 0.4 });
+    }
+
+    // Synaptic Cleft Glow Volume (x = 6.20 to 6.55)
+    const cleftGeom = new THREE.CylinderGeometry(0.68, 0.68, 0.32, 32);
+    cleftGeom.rotateZ(Math.PI / 2);
+    const cleftMat = new THREE.MeshBasicMaterial({
+      color: 0x34d399,
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.DoubleSide
+    });
+    const cleftMesh = new THREE.Mesh(cleftGeom, cleftMat);
+    cleftMesh.position.set(6.36, 0, 0);
+    layerGroups.synapse.add(cleftMesh);
+    registerEntityMesh(cleftMesh, 'SYNAPTIC_CLEFT');
+
+    // Postsynaptic Membrane & Receptor Density Cup (x = 6.65)
+    const postGeom = new THREE.CylinderGeometry(0.82, 0.92, 0.35, 36);
+    postGeom.rotateZ(Math.PI / 2);
+    const postMat = new THREE.MeshPhysicalMaterial({
+      color: 0xc084fc,
+      emissive: 0x581c87,
+      emissiveIntensity: 0.5,
+      roughness: 0.3,
+      clearcoat: 0.6
+    });
+    const postMesh = new THREE.Mesh(postGeom, postMat);
+    postMesh.position.set(6.75, 0, 0);
+    layerGroups.synapse.add(postMesh);
+    registerEntityMesh(postMesh, 'POSTSYNAPTIC_MEMBRANE');
+
+    // Postsynaptic Receptor Channels embedded on Postsynaptic Face
+    const postReceptorMeshes = [];
+    for (let r = 0; r < 8; r++) {
+      const ang = (r / 8) * Math.PI * 2;
+      const rMesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.055, 0.055, 0.16, 12),
+        new THREE.MeshStandardMaterial({ color: 0xe879f9, emissive: 0x86198f, emissiveIntensity: 0.6 })
+      );
+      rMesh.rotation.z = Math.PI / 2;
+      rMesh.position.set(6.56, Math.cos(ang) * 0.42, Math.sin(ang) * 0.42);
+      layerGroups.synapse.add(rMesh);
+      registerEntityMesh(rMesh, 'POSTSYNAPTIC_MEMBRANE');
+      postReceptorMeshes.push(rMesh);
+    }
+
+    // ============================================================================
+    // 5. ACTION POTENTIAL WAVEFRONT, SALTATORY ARCS & 3D ION / NT PARTICLE STREAMS
+    // ============================================================================
+    // Glowing Action Potential Energy Ring + Core Orb
+    const apWaveGroup = new THREE.Group();
+    const apCoreOrb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.26, 24, 24),
+      new THREE.MeshBasicMaterial({ color: 0xfef08a, transparent: true, opacity: 0.95 })
+    );
+    const apHaloRing = new THREE.Mesh(
+      new THREE.TorusGeometry(0.45, 0.04, 16, 40),
+      new THREE.MeshBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.85 })
+    );
+    apHaloRing.rotation.y = Math.PI / 2;
+    apWaveGroup.add(apCoreOrb);
+    apWaveGroup.add(apHaloRing);
+    layerGroups.ap.add(apWaveGroup);
+
+    // Saltatory Conduction Jumping Arc Bridges between Nodes of Ranvier
+    const saltatoryArcMeshes = [];
+    const jumpPairs = [
+      [-3.35, -2.65],
+      [-2.65, 0.0],
+      [0.0, 2.65],
+      [2.65, 5.35]
+    ];
+    jumpPairs.forEach(([x1, x2]) => {
+      const midX = (x1 + x2) * 0.5;
+      const arcCurve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(x1, 0.18, 0),
+        new THREE.Vector3(midX, 0.92, 0.25),
+        new THREE.Vector3(x2, 0.18, 0)
+      ]);
+      const arcGeom = new THREE.TubeGeometry(arcCurve, 28, 0.028, 10, false);
+      const arcMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.18 });
+      const arcMesh = new THREE.Mesh(arcGeom, arcMat);
+      layerGroups.ap.add(arcMesh);
+      saltatoryArcMeshes.push({ mesh: arcMesh, x1, x2 });
+    });
+
+    // Instanced 3D Ion Particles at Nodes of Ranvier (Blue Na+ entering, Red K+ exiting)
+    const ION_COUNT = 120;
+    const ionSphereGeom = new THREE.SphereGeometry(0.036, 10, 10);
+    const naInstanced = new THREE.InstancedMesh(
+      ionSphereGeom,
+      new THREE.MeshBasicMaterial({ color: 0x38bdf8 }),
+      ION_COUNT
+    );
+    const kInstanced = new THREE.InstancedMesh(
+      ionSphereGeom,
+      new THREE.MeshBasicMaterial({ color: 0xf43f5e }),
+      ION_COUNT
+    );
+    layerGroups.ions.add(naInstanced);
+    layerGroups.ions.add(kInstanced);
+
+    const ionParticles = [];
+    for (let i = 0; i < ION_COUNT; i++) {
+      const nodeX = nodePositions[i % nodePositions.length];
+      ionParticles.push({
+        nodeX,
+        angle: (i / ION_COUNT) * Math.PI * 12,
+        phase: Math.random(),
+        speed: 0.8 + Math.random() * 0.9,
+        xJitter: (Math.random() - 0.5) * 0.28
+      });
+    }
+
+    // Instanced Green Neurotransmitter Particles in the Synaptic Cleft
+    const NT_COUNT = 90;
+    const ntInstanced = new THREE.InstancedMesh(
+      new THREE.SphereGeometry(0.032, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0x4ade80 }),
+      NT_COUNT
+    );
+    layerGroups.synapse.add(ntInstanced);
+
+    const ntParticles = [];
+    for (let i = 0; i < NT_COUNT; i++) {
+      ntParticles.push({
+        prog: Math.random(),
+        y: (Math.random() - 0.5) * 0.85,
+        z: (Math.random() - 0.5) * 0.85,
+        speed: 0.7 + Math.random() * 1.1
+      });
+    }
+
+    const dummy = new THREE.Object3D();
+
+    function update3DIonAndSynapseParticles(dt, cState) {
+      for (let i = 0; i < ION_COUNT; i++) {
+        const ip = ionParticles[i];
+        const distFromWave = cState.apX - ip.nodeX;
+        const isDepolarizingNode = Math.abs(distFromWave) < 1.1;
+        const isRepolarizingNode = distFromWave >= 0.3 && distFromWave < 2.2;
+
+        ip.phase = (ip.phase + dt * ip.speed * (isDepolarizingNode || isRepolarizingNode ? 2.4 : 0.45)) % 1.0;
+
+        // Blue Na+ Influx (moves radially INWARD from r=0.85 to r=0.08 during depolarization)
+        const naRadius = isDepolarizingNode
+          ? THREE.MathUtils.lerp(0.85, 0.06, ip.phase)
+          : 0.72 + Math.sin(ip.phase * Math.PI * 2) * 0.08;
+        dummy.position.set(
+          ip.nodeX + ip.xJitter,
+          Math.cos(ip.angle) * naRadius,
+          Math.sin(ip.angle) * naRadius
+        );
+        dummy.scale.setScalar(isDepolarizingNode ? 1.35 : 0.75);
+        dummy.updateMatrix();
+        naInstanced.setMatrixAt(i, dummy.matrix);
+
+        // Red K+ Efflux (moves radially OUTWARD from r=0.08 to r=0.92 during repolarization)
+        const kRadius = isRepolarizingNode
+          ? THREE.MathUtils.lerp(0.08, 0.92, ip.phase)
+          : 0.14 + Math.cos(ip.phase * Math.PI * 2) * 0.05;
+        dummy.position.set(
+          ip.nodeX + ip.xJitter,
+          Math.cos(ip.angle + 0.5) * kRadius,
+          Math.sin(ip.angle + 0.5) * kRadius
+        );
+        dummy.scale.setScalar(isRepolarizingNode ? 1.35 : 0.75);
+        dummy.updateMatrix();
+        kInstanced.setMatrixAt(i, dummy.matrix);
+      }
+      naInstanced.instanceMatrix.needsUpdate = true;
+      kInstanced.instanceMatrix.needsUpdate = true;
+
+      // Update Synaptic Vesicles & Green Neurotransmitter Cleft Particles
+      const releaseActive = cState.cleftNT > 0.15;
+      synapticVesicles.forEach((sv) => {
+        const pull = releaseActive ? 0.58 : 0.08 * Math.sin(performance.now() * 0.003 + sv.phaseOffset);
+        sv.mesh.position.x = THREE.MathUtils.lerp(sv.mesh.position.x, sv.basePos.x + pull, 0.12);
+      });
+
+      for (let i = 0; i < NT_COUNT; i++) {
+        const np = ntParticles[i];
+        if (releaseActive) {
+          np.prog = (np.prog + dt * np.speed * 1.8) % 1.0;
+          const x = THREE.MathUtils.lerp(6.05, 6.58, np.prog);
+          dummy.position.set(x, np.y * 0.65, np.z * 0.65);
+          dummy.scale.setScalar(1.15);
+        } else {
+          dummy.position.set(5.55, np.y * 0.3, np.z * 0.3);
+          dummy.scale.setScalar(0.001);
+        }
+        dummy.updateMatrix();
+        ntInstanced.setMatrixAt(i, dummy.matrix);
+      }
+      ntInstanced.instanceMatrix.needsUpdate = true;
+    }
+
+    // ============================================================================
+    // 6. MICROSCOPIC ZOOM-IN OVERLAY INSET (2D BILAYER CHANNELS vs SYNAPTIC CLEFT)
+    // ============================================================================
+    const insetCanvas = document.getElementById('micro-inset-canvas');
+    const iCtx = insetCanvas.getContext('2d');
+    let currentInsetMode = 'membrane'; // 'membrane' or 'synapse'
+
+    function resizeInsetCanvas() {
+      const rect = insetCanvas.parentElement.getBoundingClientRect();
+      insetCanvas.width = rect.width * Math.min(window.devicePixelRatio, 2);
+      insetCanvas.height = rect.height * Math.min(window.devicePixelRatio, 2);
+    }
+    window.addEventListener('resize', resizeInsetCanvas);
+    setTimeout(resizeInsetCanvas, 50);
+
+    function setInsetMode(mode) {
+      currentInsetMode = mode;
+      const btnMem = document.getElementById('btn-inset-membrane');
+      const btnSyn = document.getElementById('btn-inset-synapse');
+      if (mode === 'membrane') {
+        btnMem.className = 'px-2 py-0.5 rounded bg-cyan-500/25 text-cyan-300 font-semibold transition';
+        btnSyn.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white transition';
+      } else {
+        btnSyn.className = 'px-2 py-0.5 rounded bg-emerald-500/25 text-emerald-300 font-semibold transition';
+        btnMem.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white transition';
+      }
+    }
+    document.getElementById('btn-inset-membrane').addEventListener('click', () => setInsetMode('membrane'));
+    document.getElementById('btn-inset-synapse').addEventListener('click', () => setInsetMode('synapse'));
+
+    function renderMicroscopicInset(cState, timeSec) {
+      const w = insetCanvas.width;
+      const h = insetCanvas.height;
+      if (w === 0 || h === 0) return;
+      const dpr = Math.min(window.devicePixelRatio, 2);
+
+      iCtx.clearRect(0, 0, w, h);
+      document.getElementById('inset-gate-state').textContent = cState.gateState.split(':')[0];
+
+      if (currentInsetMode === 'membrane') {
+        // PHOSPHOLIPID BILAYER WITH GATED Na+ AND K+ CHANNELS
+        const midY = h * 0.50;
+        const bilayerHalf = h * 0.14;
+
+        // Labels: Extracellular vs Intracellular (Axoplasm)
+        iCtx.fillStyle = 'rgba(148, 163, 184, 0.75)';
+        iCtx.font = `600 ${9 * dpr}px "JetBrains Mono", monospace`;
+        iCtx.fillText('EXTRACELLULAR [Na⁺ 145 mM]', 8 * dpr, 13 * dpr);
+        iCtx.fillText(`AXOPLASM [K⁺ 155 mM]  Vm = ${Math.round(cState.vm)} mV`, 8 * dpr, h - 22 * dpr);
+
+        // Draw Phospholipid Heads & Hydrophobic Tails
+        const numCols = 22;
+        for (let c = 0; c < numCols; c++) {
+          const x = (c + 0.5) * (w / numCols);
+          // Leave openings for Na+ channel (around 32% w) and K+ channel (around 68% w)
+          if (Math.abs(x - w * 0.32) < w * 0.11 || Math.abs(x - w * 0.68) < w * 0.11) continue;
+
+          // Hydrophobic tails
+          iCtx.strokeStyle = 'rgba(251, 191, 36, 0.38)';
+          iCtx.lineWidth = 1.4 * dpr;
+          iCtx.beginPath();
+          iCtx.moveTo(x - 2 * dpr, midY - bilayerHalf);
+          iCtx.lineTo(x - 2 * dpr, midY + bilayerHalf);
+          iCtx.moveTo(x + 2 * dpr, midY - bilayerHalf);
+          iCtx.lineTo(x + 2 * dpr, midY + bilayerHalf);
+          iCtx.stroke();
+
+          // Hydrophilic phosphate heads
+          iCtx.fillStyle = '#38bdf8';
+          iCtx.beginPath();
+          iCtx.arc(x, midY - bilayerHalf, 3.8 * dpr, 0, Math.PI * 2);
+          iCtx.arc(x, midY + bilayerHalf, 3.8 * dpr, 0, Math.PI * 2);
+          iCtx.fill();
+        }
+
+        // 1. Voltage-Gated Na+ Channel (Blue) at x = 32% w
+        const naX = w * 0.32;
+        const naOpen = cState.gNa > 3.0;
+        const naInactivated = cState.gK > 6.5 && cState.gNa < 15.0;
+        const naPoreGap = naOpen ? 12 * dpr : 3 * dpr;
+
+        iCtx.fillStyle = '#2563eb';
+        iCtx.beginPath();
+        iCtx.roundRect(naX - 22 * dpr, midY - bilayerHalf - 6 * dpr, 18 * dpr - naPoreGap * 0.3, bilayerHalf * 2 + 12 * dpr, 5 * dpr);
+        iCtx.roundRect(naX + 4 * dpr + naPoreGap * 0.3, midY - bilayerHalf - 6 * dpr, 18 * dpr - naPoreGap * 0.3, bilayerHalf * 2 + 12 * dpr, 5 * dpr);
+        iCtx.fill();
+
+        // Ball-and-chain h-gate on intracellular side of Na+ channel
+        const hBallX = naInactivated ? naX : naX - 18 * dpr;
+        const hBallY = naInactivated ? midY + bilayerHalf + 7 * dpr : midY + bilayerHalf + 18 * dpr;
+        iCtx.strokeStyle = '#93c5fd';
+        iCtx.lineWidth = 1.5 * dpr;
+        iCtx.beginPath();
+        iCtx.moveTo(naX - 14 * dpr, midY + bilayerHalf + 4 * dpr);
+        iCtx.quadraticCurveTo(naX - 22 * dpr, midY + bilayerHalf + 16 * dpr, hBallX, hBallY);
+        iCtx.stroke();
+        iCtx.fillStyle = '#60a5fa';
+        iCtx.beginPath();
+        iCtx.arc(hBallX, hBallY, 4.5 * dpr, 0, Math.PI * 2);
+        iCtx.fill();
+
+        iCtx.fillStyle = '#93c5fd';
+        iCtx.fillText('Nav1.6', naX - 16 * dpr, midY - bilayerHalf - 10 * dpr);
+
+        // Animated Blue Na+ Ions flowing INWARD (top -> bottom) when Nav is open
+        for (let i = 0; i < 6; i++) {
+          const prog = ((timeSec * 1.9 + i / 6) % 1.0);
+          const iy = naOpen
+            ? (midY - bilayerHalf - 22 * dpr) + prog * (bilayerHalf * 2 + 44 * dpr)
+            : (midY - bilayerHalf - 16 * dpr) + Math.sin(timeSec * 3 + i) * 6 * dpr;
+          const ix = naX + Math.sin(i * 2.1 + timeSec * 4) * (naOpen ? 4 * dpr : 14 * dpr);
+          iCtx.fillStyle = '#38bdf8';
+          iCtx.beginPath();
+          iCtx.arc(ix, iy, 3.5 * dpr, 0, Math.PI * 2);
+          iCtx.fill();
+        }
+
+        // 2. Voltage-Gated K+ Channel (Red) at x = 68% w
+        const kX = w * 0.68;
+        const kOpen = cState.gK > 4.0;
+        const kPoreGap = kOpen ? 12 * dpr : 2.5 * dpr;
+
+        iCtx.fillStyle = '#e11d48';
+        iCtx.beginPath();
+        iCtx.roundRect(kX - 22 * dpr, midY - bilayerHalf - 6 * dpr, 18 * dpr - kPoreGap * 0.3, bilayerHalf * 2 + 12 * dpr, 5 * dpr);
+        iCtx.roundRect(kX + 4 * dpr + kPoreGap * 0.3, midY - bilayerHalf - 6 * dpr, 18 * dpr - kPoreGap * 0.3, bilayerHalf * 2 + 12 * dpr, 5 * dpr);
+        iCtx.fill();
+
+        iCtx.fillStyle = '#fda4af';
+        iCtx.fillText('Kv1.1', kX - 14 * dpr, midY - bilayerHalf - 10 * dpr);
+
+        // Animated Red K+ Ions flowing OUTWARD (bottom -> top) when Kv is open
+        for (let i = 0; i < 6; i++) {
+          const prog = ((timeSec * 1.7 + i / 6) % 1.0);
+          const iy = kOpen
+            ? (midY + bilayerHalf + 22 * dpr) - prog * (bilayerHalf * 2 + 44 * dpr)
+            : (midY + bilayerHalf + 15 * dpr) + Math.cos(timeSec * 3 + i) * 5 * dpr;
+          const ix = kX + Math.cos(i * 1.9 + timeSec * 4) * (kOpen ? 4 * dpr : 14 * dpr);
+          iCtx.fillStyle = '#fb7185';
+          iCtx.beginPath();
+          iCtx.arc(ix, iy, 3.5 * dpr, 0, Math.PI * 2);
+          iCtx.fill();
+        }
+      } else {
+        // SYNAPTIC LEVEL ZOOM-IN: PRESYNAPTIC BOUTON, VESICLE EXOCYTOSIS, CLEFT & POSTSYNAPTIC RECEPTORS
+        const preX = w * 0.34;
+        const postX = w * 0.68;
+
+        iCtx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+        iCtx.strokeStyle = '#10b981';
+        iCtx.lineWidth = 2 * dpr;
+        iCtx.beginPath();
+        iCtx.arc(w * 0.06, h * 0.5, preX - w * 0.06, -Math.PI * 0.42, Math.PI * 0.42);
+        iCtx.fill();
+        iCtx.stroke();
+
+        // Postsynaptic Membrane Wall
+        iCtx.fillStyle = 'rgba(192, 132, 252, 0.22)';
+        iCtx.strokeStyle = '#c084fc';
+        iCtx.beginPath();
+        iCtx.roundRect(postX, h * 0.12, w * 0.26, h * 0.76, 8 * dpr);
+        iCtx.fill();
+        iCtx.stroke();
+
+        // Synaptic Vesicles Fusing & Releasing Green Neurotransmitter Particles
+        const exocytosisActive = cState.cleftNT > 0.1;
+        for (let v = 0; v < 3; v++) {
+          const vy = h * (0.28 + v * 0.22);
+          const vx = exocytosisActive ? preX - 6 * dpr : preX - 24 * dpr + Math.sin(timeSec * 3 + v) * 4 * dpr;
+          iCtx.strokeStyle = '#4ade80';
+          iCtx.fillStyle = 'rgba(74, 222, 128, 0.25)';
+          iCtx.beginPath();
+          iCtx.arc(vx, vy, 10 * dpr, 0, Math.PI * 2);
+          iCtx.fill();
+          iCtx.stroke();
+        }
+
+        // Postsynaptic Receptors (Purple) & Green Neurotransmitter Particles crossing Cleft
+        for (let r = 0; r < 4; r++) {
+          const ry = h * (0.22 + r * 0.18);
+          iCtx.fillStyle = exocytosisActive ? '#e879f9' : '#9333ea';
+          iCtx.beginPath();
+          iCtx.roundRect(postX - 5 * dpr, ry - 6 * dpr, 12 * dpr, 12 * dpr, 3 * dpr);
+          iCtx.fill();
+        }
+
+        for (let n = 0; n < 18; n++) {
+          const prog = (timeSec * 1.6 + n / 18) % 1.0;
+          const nx = exocytosisActive
+            ? preX + prog * (postX - preX - 4 * dpr)
+            : preX - 22 * dpr + (n % 3) * 4 * dpr;
+          const ny = h * 0.2 + ((n * 29) % Math.floor(h * 0.6));
+          iCtx.fillStyle = '#4ade80';
+          iCtx.beginPath();
+          iCtx.arc(nx, ny, 2.8 * dpr, 0, Math.PI * 2);
+          iCtx.fill();
+        }
+
+        iCtx.fillStyle = '#cbd5e1';
+        iCtx.font = `600 ${9 * dpr}px "JetBrains Mono", monospace`;
+        iCtx.fillText('PRESYNAPTIC', 8 * dpr, 14 * dpr);
+        iCtx.fillText('CLEFT (20nm)', w * 0.38, 14 * dpr);
+        iCtx.fillText('POSTSYNAPTIC', postX + 4 * dpr, 14 * dpr);
+      }
+    }
+
+    // ============================================================================
+    // 7. INTERACTIVITY: 3D FLOATING PINS, RAYCASTING, CAMERA TWEEN & ISOLATION
+    // ============================================================================
+    const pinsContainer = document.getElementById('pins-container');
+    const pinElements = {};
+    const directoryListEl = document.getElementById('directory-list');
+    let selectedEntityId = 'AXON_HILLOCK';
+    let hoveredEntityId = null;
+    let isIsolatingStructure = false;
+
+    // Camera Tween State
+    let camTweenActive = false;
+    const camStartPos = new THREE.Vector3();
+    const camEndPos = new THREE.Vector3();
+    const targetStartPos = new THREE.Vector3();
+    const targetEndPos = new THREE.Vector3();
+    let camTweenProgress = 0;
+
+    function triggerCameraTween(destCamPos, destTargetPos) {
+      camStartPos.copy(camera.position);
+      camEndPos.copy(destCamPos);
+      targetStartPos.copy(controls.target);
+      targetEndPos.copy(destTargetPos);
+      camTweenProgress = 0;
+      camTweenActive = true;
+    }
+
+    // Build 3D Floating Pins & Right-Drawer Directory List
+    Object.values(NEURO_DB).forEach((item) => {
+      const pin = document.createElement('button');
+      pin.className = 'pin-marker px-2 py-0.5 rounded-full border border-slate-600/80 bg-slate-900/90 text-slate-100 text-[10px] font-mono-tech font-semibold flex items-center gap-1.5 shadow-lg hover:border-cyan-400';
+      const shortLabel = item.name.split(' (')[0];
+      pin.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${item.dotColor}"></span><span>${shortLabel}</span>`;
+      pin.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectNeuroEntity(item.id, true);
+      });
+      pinsContainer.appendChild(pin);
+      pinElements[item.id] = pin;
+
+      const row = document.createElement('button');
+      row.className = 'w-full text-left p-2.5 rounded-lg bg-slate-900/70 hover:bg-slate-800 border border-slate-800/90 transition flex items-center justify-between gap-2';
+      row.innerHTML = `
+        <div>
+          <div class="text-xs font-semibold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full ${item.dotColor}"></span>
+            ${item.name}
+          </div>
+          <div class="text-[10px] italic text-slate-400 ml-4">${item.subtype}</div>
+        </div>
+        <span class="text-[10px] font-mono-tech px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 shrink-0">${item.category.split(' ')[0]}</span>
+      `;
+      row.addEventListener('click', () => {
+        selectNeuroEntity(item.id, true);
+        switchRightTab('telemetry');
+      });
+      directoryListEl.appendChild(row);
+    });
+
+    function updateHighlightAndIsolation(isolatedId) {
+      interactiveMeshes.forEach((mesh) => {
+        const mId = mesh.userData.entityId;
+        const isSelected = mId === isolatedId;
+        const isHovered = mId === hoveredEntityId;
+
+        if (mesh.material.emissive) {
+          if (isSelected) {
+            mesh.material.emissive.setHex(0x22d3ee);
+            mesh.material.emissiveIntensity = 0.85;
+          } else if (isHovered) {
+            mesh.material.emissive.setHex(0x38bdf8);
+            mesh.material.emissiveIntensity = 0.6;
+          } else {
+            mesh.material.emissive.copy(mesh.userData.baseEmissive);
+            mesh.material.emissiveIntensity = mesh.userData.baseEmissiveIntensity;
+          }
+        }
+
+        if (isolatedId && !isSelected) {
+          mesh.material.transparent = true;
+          mesh.material.opacity = Math.min(mesh.userData.baseOpacity, 0.22);
+        } else {
+          mesh.material.transparent = mesh.userData.wasTransparent;
+          mesh.material.opacity = mesh.userData.baseOpacity;
+        }
+      });
+
+      Object.entries(pinElements).forEach(([id, el]) => {
+        if (id === selectedEntityId) {
+          el.classList.add('active-pin', 'ring-2', 'ring-cyan-400');
+        } else {
+          el.classList.remove('active-pin', 'ring-2', 'ring-cyan-400');
+        }
+      });
+    }
+
+    function populateTelemetryHUD(entityId, cyclePhase) {
+      const data = NEURO_DB[entityId];
+      if (!data) return;
+
+      document.getElementById('hud-category').textContent = data.category;
+      document.getElementById('hud-threshold-badge').textContent = data.threshold;
+      document.getElementById('hud-title').textContent = data.name;
+      document.getElementById('hud-subtype').textContent = data.subtype;
+      document.getElementById('hud-biochem').textContent = data.biochem;
+      document.getElementById('hud-electrical').textContent = data.electrical;
+      document.getElementById('hud-conduction').textContent = data.conduction;
+      document.getElementById('hud-kinetics').textContent = data.kinetics;
+      document.getElementById('hud-clinical').textContent = data.clinical;
+      document.getElementById('hud-pharmacology').textContent = data.pharmacology;
+      document.getElementById('hud-phase-behavior').textContent = data.phaseStatus(cyclePhase);
+    }
+
+    function selectNeuroEntity(entityId, focusCamera = true) {
+      selectedEntityId = entityId;
+      isIsolatingStructure = focusCamera;
+      const data = NEURO_DB[entityId];
+      if (data && data.insetMode) {
+        setInsetMode(data.insetMode);
+      }
+      populateTelemetryHUD(entityId, currentCyclePhase);
+      updateHighlightAndIsolation(isIsolatingStructure ? entityId : null);
+
+      if (focusCamera && data) {
+        triggerCameraTween(data.camPos, data.camTarget);
+      }
+    }
+
+    // Raycasting Hover & Click
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
+    const tooltipEl = document.getElementById('hover-tooltip');
+    const tooltipTitle = document.getElementById('tooltip-title');
+    const tooltipSub = document.getElementById('tooltip-sub');
+    let pointerDownPos = { x: 0, y: 0 };
+
+    renderer.domElement.addEventListener('pointermove', (e) => {
+      pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+      const visibleMeshes = interactiveMeshes.filter(m => m.parent && m.parent.visible);
+      const hits = raycaster.intersectObjects(visibleMeshes, false);
+
+      if (hits.length > 0) {
+        const hitId = hits[0].object.userData.entityId;
+        if (hitId && NEURO_DB[hitId]) {
+          hoveredEntityId = hitId;
+          renderer.domElement.style.cursor = 'pointer';
+          tooltipEl.classList.remove('hidden');
+          tooltipEl.style.left = `${e.clientX + 16}px`;
+          tooltipEl.style.top = `${e.clientY + 14}px`;
+          tooltipTitle.textContent = NEURO_DB[hitId].name;
+          tooltipSub.textContent = NEURO_DB[hitId].subtype;
+          updateHighlightAndIsolation(isIsolatingStructure ? selectedEntityId : null);
+          return;
+        }
+      }
+
+      if (hoveredEntityId !== null) {
+        hoveredEntityId = null;
+        renderer.domElement.style.cursor = 'grab';
+        tooltipEl.classList.add('hidden');
+        updateHighlightAndIsolation(isIsolatingStructure ? selectedEntityId : null);
+      }
+    });
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+      camTweenActive = false;
+    });
+
+    renderer.domElement.addEventListener('pointerup', (e) => {
+      const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+      if (dist < 6 && hoveredEntityId) {
+        selectNeuroEntity(hoveredEntityId, true);
+        switchRightTab('telemetry');
+      }
+    });
+
+    const projVec = new THREE.Vector3();
+    function updateFloatingPins() {
+      const showPins = document.getElementById('toggle-pins').checked;
+      if (!showPins) {
+        pinsContainer.style.display = 'none';
+        return;
+      }
+      pinsContainer.style.display = 'block';
+
+      Object.entries(NEURO_DB).forEach(([id, item]) => {
+        const pinEl = pinElements[id];
+        projVec.copy(item.pinPos);
+        projVec.project(camera);
+
+        if (projVec.z > 1.0) {
+          pinEl.style.display = 'none';
+          return;
+        }
+        const x = (projVec.x * 0.5 + 0.5) * window.innerWidth;
+        const y = (-(projVec.y * 0.5) + 0.5) * window.innerHeight;
+        const inBounds = x > 335 && x < (window.innerWidth - 395) && y > 80 && y < (window.innerHeight - 190);
+        pinEl.style.display = inBounds ? 'flex' : 'none';
+        pinEl.style.left = `${x}px`;
+        pinEl.style.top = `${y}px`;
+      });
+    }
+
+    // ============================================================================
+    // 8. BOTTOM-DOCKED MEMBRANE POTENTIAL OSCILLOSCOPE RENDERER
+    // ============================================================================
+    const oscCanvas = document.getElementById('oscilloscope-canvas');
+    const oCtx = oscCanvas.getContext('2d');
+
+    const OSC_SAMPLES = 250;
+    const precomputedOsc = [];
+    for (let i = 0; i <= OSC_SAMPLES; i++) {
+      precomputedOsc.push(evaluateLocalSpike(i / OSC_SAMPLES));
+    }
+
+    function resizeOscCanvas() {
+      const rect = oscCanvas.parentElement.getBoundingClientRect();
+      oscCanvas.width = rect.width * Math.min(window.devicePixelRatio, 2);
+      oscCanvas.height = rect.height * Math.min(window.devicePixelRatio, 2);
+    }
+    window.addEventListener('resize', resizeOscCanvas);
+    setTimeout(resizeOscCanvas, 50);
+
+    function drawOscilloscope(currentPhase) {
+      const w = oscCanvas.width;
+      const h = oscCanvas.height;
+      if (w === 0 || h === 0) return;
+      const dpr = Math.min(window.devicePixelRatio, 2);
+
+      oCtx.clearRect(0, 0, w, h);
+
+      // Map voltage Vm in [-95, +50] mV to canvas Y
+      const vmToY = (v) => h * 0.88 - ((v + 95) / 145) * (h * 0.78);
+
+      // Horizontal Reference Lines: +40 mV Peak, 0 mV, -55 mV Threshold, -70 mV Resting
+      const refLines = [
+        { v: 40, label: '+40 mV (Peak)', color: 'rgba(251, 191, 36, 0.16)', dash: [3, 3] },
+        { v: -55, label: '-55 mV (Threshold)', color: 'rgba(52, 211, 153, 0.45)', dash: [5, 4] },
+        { v: -70, label: '-70 mV (Resting)', color: 'rgba(148, 163, 184, 0.25)', dash: [2, 2] }
+      ];
+
+      refLines.forEach((rl) => {
+        const y = vmToY(rl.v);
+        oCtx.save();
+        oCtx.strokeStyle = rl.color;
+        oCtx.lineWidth = 1 * dpr;
+        oCtx.setLineDash(rl.dash);
+        oCtx.beginPath();
+        oCtx.moveTo(0, y);
+        oCtx.lineTo(w, y);
+        oCtx.stroke();
+        oCtx.fillStyle = 'rgba(148, 163, 184, 0.75)';
+        oCtx.font = `500 ${9 * dpr}px "JetBrains Mono", monospace`;
+        oCtx.fillText(rl.label, 6 * dpr, y - 3 * dpr);
+        oCtx.restore();
+      });
+
+      // Phase Vertical Dividers & Labels
+      const phaseRegions = [
+        { p: 0.15, label: 'Resting' },
+        { p: 0.24, label: 'Depolarization' },
+        { p: 0.34, label: 'Repolarization (ARP)' },
+        { p: 0.52, label: 'Hyperpolarization (RRP)' },
+        { p: 0.76, label: 'Synaptic Release' }
+      ];
+      oCtx.save();
+      oCtx.strokeStyle = 'rgba(148, 163, 184, 0.12)';
+      oCtx.fillStyle = 'rgba(203, 213, 225, 0.65)';
+      oCtx.font = `600 ${9 * dpr}px "JetBrains Mono", monospace`;
+      phaseRegions.forEach((pr) => {
+        const px = pr.p * w;
+        oCtx.beginPath();
+        oCtx.moveTo(px, 0);
+        oCtx.lineTo(px, h);
+        oCtx.stroke();
+        oCtx.fillText(pr.label, px + 5 * dpr, 13 * dpr);
+      });
+      oCtx.restore();
+
+      // 1. gNa Conductance Curve (Sky Blue)
+      oCtx.beginPath();
+      oCtx.strokeStyle = '#38bdf8';
+      oCtx.lineWidth = 1.8 * dpr;
+      for (let i = 0; i <= OSC_SAMPLES; i++) {
+        const x = (i / OSC_SAMPLES) * w;
+        const y = h * 0.90 - (precomputedOsc[i].gNa / 38) * (h * 0.65);
+        if (i === 0) oCtx.moveTo(x, y);
+        else oCtx.lineTo(x, y);
+      }
+      oCtx.stroke();
+
+      // 2. gK Conductance Curve (Rose Red)
+      oCtx.beginPath();
+      oCtx.strokeStyle = '#f43f5e';
+      oCtx.lineWidth = 1.8 * dpr;
+      for (let i = 0; i <= OSC_SAMPLES; i++) {
+        const x = (i / OSC_SAMPLES) * w;
+        const y = h * 0.90 - (precomputedOsc[i].gK / 38) * (h * 0.65);
+        if (i === 0) oCtx.moveTo(x, y);
+        else oCtx.lineTo(x, y);
+      }
+      oCtx.stroke();
+
+      // 3. Membrane Potential Vm(t) Curve (Glowing Gold)
+      oCtx.save();
+      oCtx.beginPath();
+      oCtx.strokeStyle = '#fbbf24';
+      oCtx.lineWidth = 2.6 * dpr;
+      oCtx.shadowColor = '#f59e0b';
+      oCtx.shadowBlur = 8;
+      for (let i = 0; i <= OSC_SAMPLES; i++) {
+        const x = (i / OSC_SAMPLES) * w;
+        const y = vmToY(precomputedOsc[i].vm);
+        if (i === 0) oCtx.moveTo(x, y);
+        else oCtx.lineTo(x, y);
+      }
+      oCtx.stroke();
+      oCtx.restore();
+
+      // 4. Vertical Tracking Cursor
+      const cursorX = currentPhase * w;
+      const curState = evaluateLocalSpike(currentPhase);
+      oCtx.save();
+      oCtx.strokeStyle = '#ffffff';
+      oCtx.lineWidth = 2 * dpr;
+      oCtx.beginPath();
+      oCtx.moveTo(cursorX, 0);
+      oCtx.lineTo(cursorX, h);
+      oCtx.stroke();
+
+      // Active Intersection Dots
+      const dots = [
+        { y: vmToY(curState.vm), c: '#fbbf24' },
+        { y: h * 0.90 - (curState.gNa / 38) * (h * 0.65), c: '#38bdf8' },
+        { y: h * 0.90 - (curState.gK / 38) * (h * 0.65), c: '#f43f5e' }
+      ];
+      dots.forEach((d) => {
+        oCtx.fillStyle = d.c;
+        oCtx.beginPath();
+        oCtx.arc(cursorX, d.y, 4 * dpr, 0, Math.PI * 2);
+        oCtx.fill();
+      });
+      oCtx.restore();
+    }
+
+    // Interactive Scrubbing on Oscilloscope Graph
+    let isDraggingOsc = false;
+    function scrubFromOscEvent(e) {
+      const rect = oscCanvas.getBoundingClientRect();
+      const clampedX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      currentCyclePhase = clampedX / rect.width;
+      document.getElementById('slider-scrub').value = currentCyclePhase;
+      populateTelemetryHUD(selectedEntityId, currentCyclePhase);
+    }
+    oscCanvas.addEventListener('pointerdown', (e) => {
+      isDraggingOsc = true;
+      scrubFromOscEvent(e);
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (isDraggingOsc) scrubFromOscEvent(e);
+    });
+    window.addEventListener('pointerup', () => {
+      isDraggingOsc = false;
+    });
+
+    // ============================================================================
+    // 9. UI CONTROLS, LAYER TOGGLES & CAMERA PRESETS
+    // ============================================================================
+    let isPlaying = true;
+    let playbackSpeed = 1.0;
+    let currentCyclePhase = 0.28;
+
+    const btnPlayPause = document.getElementById('btn-play-pause');
+    btnPlayPause.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      document.getElementById('icon-pause').classList.toggle('hidden', !isPlaying);
+      document.getElementById('icon-play').classList.toggle('hidden', isPlaying);
+      document.getElementById('play-pause-text').textContent = isPlaying ? 'Pause' : 'Play';
+    });
+
+    document.querySelectorAll('.speed-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        playbackSpeed = parseFloat(btn.dataset.speed);
+        document.querySelectorAll('.speed-btn').forEach(b => {
+          b.className = 'speed-btn px-2 py-1 rounded text-slate-400 hover:text-white transition';
+        });
+        btn.className = 'speed-btn px-2 py-1 rounded bg-cyan-500/25 text-cyan-300 font-semibold transition';
+      });
+    });
+
+    const sliderScrub = document.getElementById('slider-scrub');
+    sliderScrub.addEventListener('input', (e) => {
+      currentCyclePhase = parseFloat(e.target.value);
+      populateTelemetryHUD(selectedEntityId, currentCyclePhase);
+    });
+
+    document.getElementById('btn-fire-ap').addEventListener('click', () => {
+      currentCyclePhase = 0.14;
+      isPlaying = true;
+      document.getElementById('icon-pause').classList.remove('hidden');
+      document.getElementById('icon-play').classList.add('hidden');
+      document.getElementById('play-pause-text').textContent = 'Pause';
+    });
+
+    // Layer Visibility Toggles
+    document.getElementById('toggle-anatomy').addEventListener('change', (e) => {
+      layerGroups.anatomy.visible = e.target.checked;
+    });
+    document.getElementById('toggle-ions').addEventListener('change', (e) => {
+      layerGroups.ions.visible = e.target.checked;
+    });
+    document.getElementById('toggle-ap').addEventListener('change', (e) => {
+      layerGroups.ap.visible = e.target.checked;
+    });
+    document.getElementById('toggle-myelin').addEventListener('change', (e) => {
+      layerGroups.myelin.visible = e.target.checked;
+      if (!e.target.checked) {
+        document.getElementById('toggle-saltatory').checked = false;
+      }
+    });
+    document.getElementById('toggle-synapse').addEventListener('change', (e) => {
+      layerGroups.synapse.visible = e.target.checked;
+    });
+
+    function switchRightTab(tab) {
+      const isTel = tab === 'telemetry';
+      document.getElementById('panel-telemetry').classList.toggle('hidden', !isTel);
+      document.getElementById('panel-directory').classList.toggle('hidden', isTel);
+      document.getElementById('tab-telemetry').className = isTel
+        ? 'px-3 py-1.5 text-xs font-semibold rounded-t-lg border-b-2 border-cyan-400 text-cyan-300 bg-cyan-500/10'
+        : 'px-3 py-1.5 text-xs font-semibold rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+      document.getElementById('tab-directory').className = !isTel
+        ? 'px-3 py-1.5 text-xs font-semibold rounded-t-lg border-b-2 border-cyan-400 text-cyan-300 bg-cyan-500/10'
+        : 'px-3 py-1.5 text-xs font-semibold rounded-t-lg border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+    }
+    document.getElementById('tab-telemetry').addEventListener('click', () => switchRightTab('telemetry'));
+    document.getElementById('tab-directory').addEventListener('click', () => switchRightTab('directory'));
+
+    function resetCameraAndIsolation() {
+      isIsolatingStructure = false;
+      updateHighlightAndIsolation(null);
+      triggerCameraTween(DEFAULT_CAM_POS, DEFAULT_CAM_TARGET);
+    }
+    document.getElementById('btn-reset-camera').addEventListener('click', resetCameraAndIsolation);
+    document.getElementById('btn-clear-selection').addEventListener('click', resetCameraAndIsolation);
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') resetCameraAndIsolation();
+      if (e.key === ' ') {
+        e.preventDefault();
+        btnPlayPause.click();
+      }
+    });
+
+    document.querySelectorAll('.preset-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const preset = btn.dataset.preset;
+        if (preset === 'overview') {
+          resetCameraAndIsolation();
+        } else if (preset === 'soma') {
+          selectNeuroEntity('AXON_HILLOCK', true);
+        } else if (preset === 'node') {
+          selectNeuroEntity('NODES_OF_RANVIER', true);
+        } else if (preset === 'synapse') {
+          selectNeuroEntity('SYNAPTIC_VESICLES', true);
+        }
+      });
+    });
+
+    // ============================================================================
+    // 10. MASTER REAL-TIME ANIMATION LOOP
+    // ============================================================================
+    let lastFrameTime = performance.now();
+    let lastHudBucket = -1;
+
+    // Initialize HUD with Axon Hillock
+    selectNeuroEntity('AXON_HILLOCK', false);
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+      lastFrameTime = now;
+      const timeSec = now * 0.001;
+
+      // Full cycle duration at 1x speed = 4.2 seconds (representing 5.00 ms of neurophysiology)
+      const simCycleDuration = 4.2;
+      if (isPlaying && !isDraggingOsc) {
+        currentCyclePhase = (currentCyclePhase + (dt * playbackSpeed) / simCycleDuration) % 1.0;
+        sliderScrub.value = currentCyclePhase;
+      }
+
+      const isSaltatory = document.getElementById('toggle-saltatory').checked && document.getElementById('toggle-myelin').checked;
+      const cState = evaluateNeuronCycle(currentCyclePhase, isSaltatory);
+
+      // 1. Update 3D Action Potential Wavefront & Dynamic Point Light
+      apWaveGroup.position.set(cState.apX, 0, 0);
+      const pulseScale = 1.0 + 0.28 * Math.sin(timeSec * 14);
+      apWaveGroup.scale.setScalar(pulseScale);
+      apPointLight.position.set(cState.apX, 0.25, 0.65);
+
+      // Highlight Saltatory Jumping Arcs when AP jumps across an internode
+      saltatoryArcMeshes.forEach((sa) => {
+        sa.mesh.visible = isSaltatory;
+        if (isSaltatory) {
+          const inJump = cState.apX >= sa.x1 - 0.3 && cState.apX <= sa.x2 + 0.3;
+          sa.mesh.material.opacity = inJump ? 0.85 : 0.14;
+        }
+      });
+
+      // 2. Pulse Nodal Nav & Kv Channel Glows based on local wave proximity
+      navChannelMeshes.forEach((nc) => {
+        const dist = Math.abs(cState.apX - nc.nodeX);
+        nc.mesh.scale.setScalar(dist < 0.85 ? 1.45 : 1.0);
+      });
+      kvChannelMeshes.forEach((kc) => {
+        const dist = cState.apX - kc.nodeX;
+        kc.mesh.scale.setScalar(dist > 0.2 && dist < 1.8 ? 1.45 : 1.0);
+      });
+
+      // 3. Update 3D Ion Flux & Synaptic Cleft Neurotransmitter Particles
+      update3DIonAndSynapseParticles(dt, cState);
+
+      // 4. Smooth Camera Tweening
+      if (camTweenActive) {
+        camTweenProgress = Math.min(1.0, camTweenProgress + dt * 2.4);
+        const ease = 1 - Math.pow(1 - camTweenProgress, 3);
+        camera.position.lerpVectors(camStartPos, camEndPos, ease);
+        controls.target.lerpVectors(targetStartPos, targetEndPos, ease);
+        if (camTweenProgress >= 1.0) camTweenActive = false;
+      }
+
+      controls.update();
+      renderer.render(scene, camera);
+
+      // 5. Update Floating 3D Pins & Header Readouts
+      updateFloatingPins();
+
+      document.getElementById('current-phase-name').textContent = cState.phaseName;
+      document.getElementById('phase-indicator-dot').style.backgroundColor = cState.phaseColor;
+      const vmRounded = Math.round(cState.vm);
+      document.getElementById('live-vm').textContent = vmRounded > 0 ? `+${vmRounded}` : vmRounded;
+      document.getElementById('live-gna').textContent = cState.gNa.toFixed(1);
+      document.getElementById('live-gk').textContent = cState.gK.toFixed(1);
+      document.getElementById('live-velocity').textContent = cState.velocity;
+      document.getElementById('live-nt').textContent = cState.cleftNT.toFixed(2);
+      document.getElementById('phase-pct-label').textContent = `${Math.round(currentCyclePhase * 100)}%`;
+      document.getElementById('cycle-time-readout').textContent = `t = ${(currentCyclePhase * 5.0).toFixed(2)} ms / 5.00 ms`;
+
+      const bucket = Math.floor(currentCyclePhase * 25);
+      if (bucket !== lastHudBucket) {
+        lastHudBucket = bucket;
+        document.getElementById('hud-live-phase-tag').textContent = cState.phaseTag;
+        if (NEURO_DB[selectedEntityId]) {
+          document.getElementById('hud-phase-behavior').textContent = NEURO_DB[selectedEntityId].phaseStatus(currentCyclePhase);
+        }
+      }
+
+      // 6. Render Microscopic Zoom-In Inset & Bottom Membrane Potential Oscilloscope
+      renderMicroscopicInset(cState, timeSec);
+      drawOscilloscope(currentCyclePhase);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      resizeOscCanvas();
+      resizeInsetCanvas();
+    });
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

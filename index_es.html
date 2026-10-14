@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Human Atlas · Inicio en español</title>
+  <script>
+    const target = new URL("./index.html", window.location.href);
+    target.searchParams.set("lang", "es");
+    target.hash = window.location.hash;
+    window.location.replace(target);
+  </script>
+  <noscript><meta http-equiv="refresh" content="0;url=./index.html?lang=es"></noscript>
+</head>
+<body><p>Abriendo Human Atlas en español…</p></body>
+</html>
