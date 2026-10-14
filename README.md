@@ -24,3 +24,6 @@ Upload changed files to the same paths and commit to main; Pages republishes aut
 The anatomy is a procedural educational approximation, not clinically validated surgical geometry. Pressure/volume curves and flow are illustrative. Medical assumptions and references are in the in-app field guide. Browser/device validation is still required for production use.
 
 Official documentation: https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site
+
+## About page
+The header About link opens ./about.html. The About page links back to ./index.html. To update an existing deployment, replace index.html and add about.html; other app files are unchanged.

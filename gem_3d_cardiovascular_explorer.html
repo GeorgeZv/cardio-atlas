@@ -1,0 +1,2602 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CardioSim 3D — Advanced Clinical Electrophysiology & Hemodynamics Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        slate: {
+                            850: '#111827',
+                            900: '#0b1120',
+                            950: '#060913',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #060913;
+            color: #f1f5f9;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background: radial-gradient(circle at 45% 42%, #162238 0%, #090d18 65%, #04070e 100%);
+        }
+        /* Custom Scrollbars */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.8);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 1);
+        }
+        /* Glassmorphism Panels */
+        .medical-panel {
+            background: rgba(11, 17, 32, 0.84);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(51, 65, 85, 0.55);
+            box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.6);
+        }
+        /* Custom Range Inputs */
+        input[type=range].clinical-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(30, 41, 59, 0.9);
+            height: 6px;
+            border-radius: 999px;
+            outline: none;
+        }
+        input[type=range].clinical-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #38bdf8;
+            border: 2px solid #0f172a;
+            cursor: pointer;
+            box-shadow: 0 0 8px rgba(56, 189, 248, 0.8);
+            transition: transform 0.15s ease;
+        }
+        input[type=range].clinical-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.18);
+        }
+        /* 3D Floating Anatomical Pins */
+        .anat-pin {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 2px 7px 2px 5px;
+            border-radius: 9999px;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            background: rgba(9, 14, 26, 0.82);
+            border: 1px solid rgba(100, 116, 139, 0.5);
+            color: #e2e8f0;
+            white-space: nowrap;
+            transition: background 0.15s, border-color 0.15s, transform 0.15s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+        }
+        .anat-pin:hover, .anat-pin.active-pin {
+            background: rgba(14, 116, 144, 0.9);
+            border-color: #38bdf8;
+            color: #ffffff;
+            transform: translate(-50%, -50%) scale(1.08);
+            z-index: 40 !important;
+        }
+        .anat-pin-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+        .ecg-glow {
+            text-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased selection:bg-sky-500 selection:text-white">
+
+    <div id="canvas-container"></div>
+    <div id="pins-container" class="absolute inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+    <!-- Hover Tooltip -->
+    <div id="hover-tooltip" class="fixed pointer-events-none z-50 hidden px-3 py-1.5 rounded-lg bg-slate-950/95 border border-sky-500/50 text-xs shadow-xl backdrop-blur-md">
+        <div class="font-semibold text-white" id="tooltip-title">Left Ventricle</div>
+        <div class="text-[10px] text-sky-400 font-mono" id="tooltip-sub">Ventriculus sinister • Click to inspect</div>
+    </div>
+
+    <header class="fixed top-3 left-3 right-3 z-30 flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 rounded-xl medical-panel">
+        <!-- App Brand -->
+        <div class="flex items-center gap-3">
+            <div class="relative flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-rose-500/20 to-sky-500/20 border border-rose-500/40">
+                <svg class="w-5 h-5 text-rose-500 animate-pulse" id="heart-beat-icon" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span class="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-950"></span>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="text-sm font-bold tracking-tight text-white">CARDIOSIM <span class="text-sky-400 font-mono text-xs">3D.v4</span></h1>
+                    <span class="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider bg-sky-500/15 text-sky-300 border border-sky-500/30 rounded">Surgical & Hemodynamic Atlas</span>
+                </div>
+                <p class="text-[11px] text-slate-400 hidden md:block">Interactive WebGL Cardiac Electrophysiology, Valve Kinematics & Wiggers Telemetry</p>
+            </div>
+        </div>
+
+        <!-- Live Cycle Phase Banner -->
+        <div class="flex items-center gap-3 bg-slate-900/90 border border-slate-700/70 rounded-lg px-3 py-1.5">
+            <div class="flex flex-col">
+                <span class="text-[9px] font-mono uppercase tracking-widest text-slate-400">Current Cardiac Phase</span>
+                <div class="flex items-center gap-2">
+                    <span id="live-phase-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span id="live-phase-name" class="text-xs font-semibold text-white font-mono">Ventricular Ejection (Rapid)</span>
+                </div>
+            </div>
+            <div class="h-6 w-px bg-slate-800"></div>
+            <div class="flex flex-col text-right font-mono">
+                <span class="text-[9px] uppercase tracking-widest text-slate-400">Cycle Time</span>
+                <span id="live-cycle-time" class="text-xs font-semibold text-sky-400">0.24s / 0.80s</span>
+            </div>
+        </div>
+
+        <!-- Real-Time Vitals Readout -->
+        <div class="hidden xl:flex items-center gap-4 font-mono">
+            <div class="flex flex-col items-end">
+                <span class="text-[9px] text-slate-400 uppercase">Heart Rate</span>
+                <div class="text-xs font-bold text-emerald-400 ecg-glow"><span id="hud-bpm">75</span> <span class="text-[10px] font-normal text-slate-400">BPM</span></div>
+            </div>
+            <div class="flex flex-col items-end">
+                <span class="text-[9px] text-slate-400 uppercase">LV / Ao Pressure</span>
+                <div class="text-xs font-bold text-rose-400"><span id="hud-lv-p">118</span>/<span id="hud-ao-p">116</span> <span class="text-[10px] font-normal text-slate-400">mmHg</span></div>
+            </div>
+            <div class="flex flex-col items-end">
+                <span class="text-[9px] text-slate-400 uppercase">LV Volume (EDV/ESV)</span>
+                <div class="text-xs font-bold text-sky-400"><span id="hud-lv-v">72</span> <span class="text-[10px] font-normal text-slate-400">mL (EF 62%)</span></div>
+            </div>
+            <div class="flex flex-col items-end">
+                <span class="text-[9px] text-slate-400 uppercase">Valve State</span>
+                <div class="text-[11px] font-semibold text-amber-300" id="hud-valves-state">AV: CLOSED | SL: OPEN</div>
+            </div>
+        </div>
+
+        <!-- Camera & Isolation Reset Controls -->
+        <div class="flex items-center gap-1.5">
+            <button id="btn-isolate-mode" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-800/90 hover:bg-slate-700 text-slate-300 border border-slate-700 transition flex items-center gap-1.5" title="Dim unselected structures when inspecting">
+                <span id="isolate-indicator" class="w-2 h-2 rounded-full bg-sky-400"></span>
+                <span>Auto-Dim: ON</span>
+            </button>
+            <button id="btn-reset-view" class="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 transition flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                <span>Reset View</span>
+            </button>
+        </div>
+    </header>
+
+    <aside id="left-drawer" class="fixed top-20 left-3 bottom-48 z-20 w-72 rounded-xl medical-panel flex flex-col overflow-hidden transition-transform duration-300">
+        <!-- Drawer Tabs -->
+        <div class="grid grid-cols-2 border-b border-slate-800 bg-slate-950/50 p-1 gap-1">
+            <button id="tab-btn-layers" onclick="switchLeftTab('layers')" class="py-1.5 text-xs font-semibold rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 transition">
+                Layers & Cutaway
+            </button>
+            <button id="tab-btn-index" onclick="switchLeftTab('index')" class="py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition">
+                Anatomical Index (18)
+            </button>
+        </div>
+
+        <!-- TAB 1: Layers, Cutaway & Simulation Controls -->
+        <div id="left-tab-layers" class="flex-1 overflow-y-auto p-3.5 space-y-4">
+            <!-- Coronal Cutaway Section -->
+            <div class="bg-slate-900/75 border border-slate-800 rounded-lg p-3 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <label class="text-xs font-semibold text-white flex items-center gap-1.5">
+                        <svg class="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 5.758a3 3 0 10-4.243 4.243 3 3 0 004.243-4.243zm0-5.758a3 3 0 10-4.243-4.243 3 3 0 004.243 4.243z"/></svg>
+                        Coronal Cutaway Plane
+                    </label>
+                    <input type="checkbox" id="toggle-cutaway" checked class="w-4 h-4 accent-sky-500 rounded cursor-pointer">
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">Slice anterior myocardium to expose internal chambers, valves, papillary muscles & septum.</p>
+                <div class="space-y-1">
+                    <div class="flex justify-between text-[10px] font-mono text-slate-400">
+                        <span>Posterior (-Z)</span>
+                        <span id="cutaway-depth-label" class="text-sky-400"> Plane: +0.35</span>
+                        <span>Anterior (+Z)</span>
+                    </div>
+                    <input type="range" id="slider-cutaway" min="-2.2" max="2.8" step="0.05" value="0.35" class="w-full clinical-slider">
+                </div>
+                <div class="flex gap-1.5 pt-1">
+                    <button onclick="setCutawayPreset(0.35, true)" class="flex-1 py-1 text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-sky-300 rounded border border-slate-700">4-Chamber View</button>
+                    <button onclick="setCutawayPreset(2.8, false)" class="flex-1 py-1 text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700">Full Exterior</button>
+                </div>
+            </div>
+
+            <!-- Anatomical Layer Visibility Toggles -->
+            <div class="space-y-2">
+                <h3 class="text-[10px] font-mono uppercase tracking-wider text-slate-400 px-1">Visual Layer Overlays</h3>
+
+                <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/90 border border-slate-800/80 cursor-pointer transition">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                        <div>
+                            <div class="text-xs font-medium text-slate-200">Exterior MyocardiumShell</div>
+                            <div class="text-[10px] text-slate-400">Semi-transparent epicardial wall</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="toggle-myocardium" checked class="w-4 h-4 accent-sky-500 rounded">
+                </label>
+
+                <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/90 border border-slate-800/80 cursor-pointer transition">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]"></span>
+                        <div>
+                            <div class="text-xs font-medium text-slate-200">Conduction Pathways</div>
+                            <div class="text-[10px] text-slate-400">SA/AV Nodes, His-Purkinje pulse</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="toggle-conduction" checked class="w-4 h-4 accent-sky-500 rounded">
+                </label>
+
+                <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/90 border border-slate-800/80 cursor-pointer transition">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-blue-500 to-red-500"></span>
+                        <div>
+                            <div class="text-xs font-medium text-slate-200">Hemodynamic Blood Flow</div>
+                            <div class="text-[10px] text-slate-400">Instanced O₂ (Red) & Deoxy (Blue)</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="toggle-particles" checked class="w-4 h-4 accent-sky-500 rounded">
+                </label>
+
+                <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/90 border border-slate-800/80 cursor-pointer transition">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-red-600"></span>
+                        <div>
+                            <div class="text-xs font-medium text-slate-200">Coronary Vasculature</div>
+                            <div class="text-[10px] text-slate-400">LAD, LCx, RCA & Cardiac Veins</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="toggle-coronary" checked class="w-4 h-4 accent-sky-500 rounded">
+                </label>
+
+                <label class="flex items-center justify-between p-2 rounded-lg bg-slate-900/50 hover:bg-slate-900/90 border border-slate-800/80 cursor-pointer transition">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span>
+                        <div>
+                            <div class="text-xs font-medium text-slate-200">3D Anatomical Pins</div>
+                            <div class="text-[10px] text-slate-400">Floating interactive callout markers</div>
+                        </div>
+                    </div>
+                    <input type="checkbox" id="toggle-pins" checked class="w-4 h-4 accent-sky-500 rounded">
+                </label>
+            </div>
+
+            <!-- Heart Rate & Clinical Presets -->
+            <div class="bg-slate-900/75 border border-slate-800 rounded-lg p-3 space-y-2.5">
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-semibold text-white">Intrinsic Heart Rate</span>
+                    <span id="bpm-slider-label" class="text-xs font-mono text-emerald-400 font-bold">75 BPM</span>
+                </div>
+                <input type="range" id="slider-bpm" min="45" max="150" step="1" value="75" class="w-full clinical-slider">
+                <div class="grid grid-cols-3 gap-1 pt-1">
+                    <button onclick="setHeartRate(52)" class="py-1 text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700">Brady (52)</button>
+                    <button onclick="setHeartRate(75)" class="py-1 text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-emerald-300 rounded border border-slate-700">Normal (75)</button>
+                    <button onclick="setHeartRate(125)" class="py-1 text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-rose-300 rounded border border-slate-700">Tachy (125)</button>
+                </div>
+            </div>
+
+            <!-- Color Legend -->
+            <div class="bg-slate-950/60 border border-slate-800/80 rounded-lg p-2.5 space-y-1.5 text-[11px]">
+                <div class="text-[10px] font-mono uppercase text-slate-400">Hemodynamic & EP Legend</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-red-500"></span><span class="text-slate-300">Arterial (98% SaO₂)</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-blue-500"></span><span class="text-slate-300">Venous (75% SvO₂)</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span><span class="text-slate-300">EP Action Potential</span></div>
+                    <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-amber-100"></span><span class="text-slate-300">Valvular Apparatus</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: Quick-Jump Anatomical Index -->
+        <div id="left-tab-index" class="hidden flex-1 overflow-y-auto p-2.5 space-y-1.5">
+            <!-- Dynamically populated by JS -->
+        </div>
+    </aside>
+
+    <aside id="right-drawer" class="fixed top-20 right-3 bottom-48 z-20 w-80 md:w-96 rounded-xl medical-panel flex flex-col overflow-hidden transition-transform duration-300">
+        <!-- Header -->
+        <div class="p-4 border-b border-slate-800 bg-gradient-to-r from-slate-900 via-slate-900 to-sky-950/40 flex items-start justify-between gap-2">
+            <div>
+                <div class="flex items-center gap-2 mb-1">
+                    <span id="telemetry-category" class="px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider rounded bg-rose-500/20 text-rose-300 border border-rose-500/40">Cardiac Chamber</span>
+                    <span id="telemetry-o2-badge" class="px-2 py-0.5 text-[10px] font-mono rounded bg-red-500/20 text-red-300 border border-red-500/30">SaO₂ 98%</span>
+                </div>
+                <h2 id="telemetry-title" class="text-base font-bold text-white leading-tight">Left Ventricle (LV)</h2>
+                <p id="telemetry-latin" class="text-xs italic text-sky-400 font-serif">Ventriculus sinister</p>
+            </div>
+            <button onclick="resetSelectionAndCamera()" class="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white border border-slate-700 transition" title="Clear Selection">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <!-- Telemetry Body -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+            <!-- Live Instantaneous Status Box -->
+            <div class="p-3 rounded-lg bg-sky-950/30 border border-sky-500/30 space-y-1.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-[10px] font-mono uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-sky-400 animate-ping"></span>
+                        Real-Time Phase Activity
+                    </span>
+                    <span id="telemetry-live-phase-tag" class="text-[10px] font-mono text-slate-300">Systole</span>
+                </div>
+                <p id="telemetry-live-status" class="text-xs text-slate-100 font-medium leading-relaxed">
+                    Myocardium actively contracting; intraventricular pressure exceeds aortic root pressure (120 mmHg), propelling stroke volume across the open aortic valve.
+                </p>
+            </div>
+
+            <!-- Perfusion / Vascular Supply -->
+            <div class="flex items-start gap-2.5 p-2.5 rounded-lg bg-slate-900/70 border border-slate-800">
+                <svg class="w-4 h-4 text-rose-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <div>
+                    <div class="text-[10px] font-mono uppercase text-slate-400">Vascular / Perfusion Supply & Innervation</div>
+                    <div id="telemetry-supply" class="text-xs text-slate-200 font-medium mt-0.5">Left Anterior Descending (LAD), Left Circumflex (LCx) & Posterior Descending Artery (PDA)</div>
+                </div>
+            </div>
+
+            <!-- Hemodynamics & Physiological Metrics Grid -->
+            <div>
+                <h3 class="text-[10px] font-mono uppercase tracking-wider text-slate-400 mb-2">Hemodynamic & Physiological Parameters</h3>
+                <div class="grid grid-cols-3 gap-2 font-mono">
+                    <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                        <div class="text-[9px] text-slate-400 uppercase" id="metric-1-label">Pressure</div>
+                        <div class="text-xs font-bold text-white mt-0.5" id="telemetry-pressure">120 / 8 mmHg</div>
+                        <div class="text-[9px] text-sky-400 mt-0.5" id="metric-1-sub">Sys / EDP</div>
+                    </div>
+                    <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                        <div class="text-[9px] text-slate-400 uppercase" id="metric-2-label">Volume / Area</div>
+                        <div class="text-xs font-bold text-white mt-0.5" id="telemetry-volume">120 / 45 mL</div>
+                        <div class="text-[9px] text-emerald-400 mt-0.5" id="metric-2-sub">EDV / ESV (SV 75mL)</div>
+                    </div>
+                    <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                        <div class="text-[9px] text-slate-400 uppercase" id="metric-3-label">O₂ Saturation</div>
+                        <div class="text-xs font-bold text-white mt-0.5" id="telemetry-o2">98% SaO₂</div>
+                        <div class="text-[9px] text-rose-400 mt-0.5" id="metric-3-sub">pO₂ ~100 mmHg</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Structural & Electrophysiological Overview -->
+            <div class="space-y-1.5">
+                <h3 class="text-[10px] font-mono uppercase tracking-wider text-slate-400">Surgical Anatomy & Electrophysiology</h3>
+                <p id="telemetry-description" class="text-xs text-slate-300 leading-relaxed bg-slate-900/50 p-3 rounded-lg border border-slate-800/80">
+                    Forms the apex and posteroinferior aspect of the heart. Wall thickness (8–12 mm) is 3x thicker than the right ventricle to overcome systemic vascular resistance (SVR). Depolarized rapidly via Left Bundle Branch (anterior and posterior fascicles) and subendocardial Purkinje network.
+                </p>
+            </div>
+
+            <!-- Auscultation Landmarks -->
+            <div class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 space-y-1">
+                <div class="flex items-center gap-1.5 text-amber-300 font-semibold text-xs">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/></svg>
+                    <span>Clinical Auscultation Landmark</span>
+                </div>
+                <p id="telemetry-auscultation" class="text-xs text-slate-200 leading-relaxed">
+                    5th Left Intercostal Space (ICS) at the Midclavicular Line (Mitral / Apical Area — Point of Maximal Impulse, PMI).
+                </p>
+            </div>
+
+            <!-- Pathophysiology & Clinical Pearls -->
+            <div class="space-y-1.5">
+                <h3 class="text-[10px] font-mono uppercase tracking-wider text-rose-400">Pathology & High-Yield Clinical Pearls</h3>
+                <ul id="telemetry-pearls" class="space-y-1.5 text-xs text-slate-300 bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                    <!-- Populated dynamically -->
+                </ul>
+            </div>
+        </div>
+    </aside>
+
+    <footer class="fixed bottom-3 left-3 right-3 h-40 z-30 rounded-xl medical-panel flex flex-col overflow-hidden">
+        <!-- Top Control Strip of Wiggers Dock -->
+        <div class="flex flex-wrap items-center justify-between gap-2 px-3.5 py-1.5 border-b border-slate-800 bg-slate-950/70">
+            <!-- Playback & Speed Controls -->
+            <div class="flex items-center gap-1.5">
+                <button id="btn-play-pause" onclick="togglePlayPause()" class="px-2.5 py-1 rounded bg-sky-500 hover:bg-sky-400 text-slate-950 font-semibold text-xs flex items-center gap-1 transition shadow">
+                    <svg id="icon-pause" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    <svg id="icon-play" class="w-3.5 h-3.5 hidden" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                    <span id="play-pause-text">Pause</span>
+                </button>
+
+                <div class="flex items-center bg-slate-900 border border-slate-800 rounded p-0.5 text-[11px] font-mono">
+                    <button onclick="setPlaybackSpeed(0.25)" id="speed-025" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition">0.25x</button>
+                    <button onclick="setPlaybackSpeed(0.5)" id="speed-05" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition">0.5x</button>
+                    <button onclick="setPlaybackSpeed(1.0)" id="speed-1" class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold transition">1.0x</button>
+                </div>
+
+                <!-- Interactive Scrubber Slider -->
+                <div class="hidden sm:flex items-center gap-2 ml-2">
+                    <span class="text-[10px] font-mono text-slate-400">Scrub Cycle:</span>
+                    <input type="range" id="wiggers-scrubber" min="0" max="1" step="0.002" value="0" class="w-28 md:w-40 clinical-slider">
+                </div>
+            </div>
+
+            <!-- Curve Legend -->
+            <div class="flex items-center gap-3 text-[10px] font-mono">
+                <span class="flex items-center gap-1 text-rose-400"><span class="w-2.5 h-0.5 bg-rose-400 inline-block"></span>LV Pressure</span>
+                <span class="flex items-center gap-1 text-amber-400"><span class="w-2.5 h-0.5 bg-amber-400 inline-block"></span>Aortic P</span>
+                <span class="flex items-center gap-1 text-sky-400"><span class="w-2.5 h-0.5 bg-sky-400 inline-block"></span>LA Pressure</span>
+                <span class="hidden md:flex items-center gap-1 text-purple-400"><span class="w-2.5 h-0.5 bg-purple-400 inline-block"></span>LV Volume</span>
+                <span class="flex items-center gap-1 text-emerald-400"><span class="w-2.5 h-0.5 bg-emerald-400 inline-block"></span>ECG (Lead II)</span>
+                <span class="hidden lg:flex items-center gap-1 text-slate-300"><span class="w-2 h-2 rounded-full bg-slate-300 inline-block"></span>Phonocardiogram (S1-S4)</span>
+            </div>
+        </div>
+
+        <!-- Synchronized Wiggers Diagram Canvas -->
+        <div class="relative flex-1 w-full h-full bg-slate-950/50 cursor-ew-resize" id="wiggers-container">
+            <canvas id="wiggers-canvas" class="w-full h-full block"></canvas>
+        </div>
+    </footer>
+
+    <script>
+        /**
+         * CLINICAL ANATOMICAL & HEMODYNAMIC DATABASE
+         * Contains physiological parameters, phase correlations, auscultation sites, and pathology pearls.
+         */
+        const ANATOMICAL_DB = {
+            "LV": {
+                id: "LV",
+                name: "Left Ventricle (LV)",
+                latin: "Ventriculus sinister",
+                category: "Cardiac Chamber",
+                colorBadge: "rose",
+                o2Badge: "SaO₂ 98%",
+                supply: "Left Anterior Descending (LAD), Left Circumflex (LCx), Posterior Descending (PDA)",
+                pressure: "120 / 8 mmHg",
+                pressureSub: "Systolic / LVEDP",
+                volume: "120 / 45 mL",
+                volumeSub: "EDV / ESV (SV ~75 mL)",
+                o2: "98% SaO₂",
+                o2Sub: "Systemic Arterial",
+                focusPos: { x: 0.9, y: -0.9, z: 0.1 },
+                camOffset: { x: 4.5, y: -0.5, z: 5.5 },
+                description: "Conical high-pressure systemic pump forming the cardiac apex. Myocardial wall thickness (8–12 mm) is roughly three times thicker than the RV to overcome systemic vascular resistance (afterload). Contains prominent trabeculae carneae and anterolateral/posteromedial papillary muscles.",
+                auscultation: "5th Left Intercostal Space (ICS) at the Midclavicular Line (Apical Impulse / Mitral Area).",
+                pearls: [
+                    "Concentric Hypertrophy: Caused by chronic pressure overload (Aortic Stenosis, Systemic Hypertension) -> sarcomeres added in parallel, resulting in an S4 atrial gallop.",
+                    "Eccentric Hypertrophy: Caused by volume overload (Mitral/Aortic Regurgitation, Dilated Cardiomyopathy) -> sarcomeres added in series, often producing an S3 ventricular gallop.",
+                    "Transmural Anterior MI: Proximal LAD occlusion causes apical/anterior LV wall akinesis and risk of mural thrombus or ventricular pseudoaneurysm."
+                ],
+                phaseStatus: (p) => {
+                    if (p < 0.11) return "Atrial Kick (Late Diastole): Passive filling complete; atrial contraction adds final ~15–20% of End-Diastolic Volume (EDV reaches ~120 mL, LVEDP ~8 mmHg).";
+                    if (p < 0.18) return "Isovolumetric Contraction: Mitral valve snaps shut (S1); LV contracts with both Mitral & Aortic valves closed. Wall tension spikes rapidly from 8 to >80 mmHg at constant volume (120 mL).";
+                    if (p < 0.42) return "Ventricular Ejection: LV pressure exceeds aortic root pressure (>80 mmHg, peaking at 120 mmHg); Aortic valve opens and ~75 mL Stroke Volume is ejected into systemic circulation.";
+                    if (p < 0.50) return "Isovolumetric Relaxation: Aortic valve closes (A2 of S2); LV relaxes rapidly with all valves closed at End-Systolic Volume (ESV ~45 mL).";
+                    if (p < 0.72) return "Rapid Ventricular Filling: LV pressure drops below LA pressure; Mitral valve opens and rapid passive inflow accounts for ~80% of ventricular filling.";
+                    return "Diastasis: Equilibration of LA and LV pressures; slow passive conduit filling prior to next SA node firing.";
+                }
+            },
+            "RV": {
+                id: "RV",
+                name: "Right Ventricle (RV)",
+                latin: "Ventriculus dexter",
+                category: "Cardiac Chamber",
+                colorBadge: "sky",
+                o2Badge: "SvO₂ 75%",
+                supply: "Right Coronary Artery (RCA) & Acute Marginal Branches (LAD supplies anterior septum)",
+                pressure: "25 / 4 mmHg",
+                pressureSub: "Systolic / RVEDP",
+                volume: "120 / 45 mL",
+                volumeSub: "EDV / ESV (SV ~75 mL)",
+                o2: "75% SvO₂",
+                o2Sub: "Mixed Venous (pO₂ 40)",
+                focusPos: { x: -0.85, y: -0.8, z: 0.45 },
+                camOffset: { x: -4.2, y: -0.4, z: 5.8 },
+                description: "Crescent-shaped, thin-walled (3–4 mm) low-pressure volume pump forming the anterior sternocostal surface of the heart. Contains the moderator band (septomarginal trabecula) carrying the Right Bundle Branch to the anterior papillary muscle, and tapers superiorly into the smooth conus arteriosus (infundibulum).",
+                auscultation: "4th–5th Left Intercostal Space along the Lower Left Sternal Border (Tricuspid Area).",
+                pearls: [
+                    "Cor Pulmonale: Acute (massive Pulmonary Embolism — McConnell's sign) or chronic pulmonary hypertension leads to RV pressure overload, septal flattening ('D-shaped LV'), and right heart failure.",
+                    "RV Infarction: Proximal RCA occlusion presents with hypotension, clear lung fields, and elevated JVP; preload-sensitive (avoid nitrates, administer IV fluids).",
+                    "Equal Stroke Volumes: Despite operating at 1/5th the pressure of the LV, the RV ejects the exact same ~75 mL Stroke Volume per beat."
+                ],
+                phaseStatus: (p) => {
+                    if (p < 0.11) return "Atrial Systole: Right atrium contracts across open Tricuspid valve, topping off RVEDV (~120 mL at 4 mmHg).";
+                    if (p < 0.18) return "Isovolumetric Contraction: Tricuspid valve closes (T1); RV pressure rises from 4 to 10 mmHg to match pulmonary artery diastolic pressure.";
+                    if (p < 0.42) return "Pulmonary Ejection: Pulmonary valve opens at >10 mmHg; RV ejects deoxygenated blood into the low-resistance pulmonary arterial tree (peak ~25 mmHg).";
+                    if (p < 0.50) return "Isovolumetric Relaxation: Pulmonary valve closes (P2 of S2, slightly after A2 especially during inspiration).";
+                    return "Ventricular Diastole (Filling): Tricuspid valve opens as RV pressure falls below RA pressure, receiving systemic venous return.";
+                }
+            },
+            "LA": {
+                id: "LA",
+                name: "Left Atrium (LA)",
+                latin: "Atrium sinistrum",
+                category: "Cardiac Chamber",
+                colorBadge: "rose",
+                o2Badge: "SaO₂ 98%",
+                supply: "Left Circumflex Artery (LCx) Atrial Branches",
+                pressure: "8–10 mmHg",
+                pressureSub: "a:10 / c:9 / v:12",
+                volume: "40–65 mL",
+                volumeSub: "Max Atrial Volume",
+                o2: "98% SaO₂",
+                o2Sub: "Pulmonary Venous",
+                focusPos: { x: 0.9, y: 0.85, z: -0.35 },
+                camOffset: { x: 4.5, y: 1.8, z: -4.8 },
+                description: "Most posterior chamber of the heart, lying directly anterior to the mid-esophagus and fibrous pericardium. Receives oxygenated blood from four pulmonary veins and features the tubular Left Atrial Appendage (LAA) lined by pectinate muscles.",
+                auscultation: "Not directly auscultated anteriorly; LA enlargement impinges posteriorly on the esophagus and left recurrent laryngeal nerve.",
+                pearls: [
+                    "Atrial Fibrillation & LAA Thrombus: Chaotic atrial depolarization eliminates the 'a' wave and causes blood stasis in the Left Atrial Appendage (source of >90% of cardioembolic strokes in non-valvular AFib).",
+                    "Ortner's Syndrome & Dysphagia: Severe LA enlargement (e.g., chronic Mitral Stenosis) compresses the esophagus (dysphagia for solids) and Left Recurrent Laryngeal Nerve (hoarseness).",
+                    "PCWP Correlation: Pulmonary Capillary Wedge Pressure (8–12 mmHg) directly reflects mean Left Atrial pressure."
+                ],
+                phaseStatus: (p) => {
+                    if (p < 0.11) return "Atrial Contraction ('a' wave ~10 mmHg): Active myocardial contraction following the ECG P-wave propels blood across the open Mitral valve.";
+                    if (p < 0.18) return "Isovolumetric Bulge ('c' wave): Mitral valve closes and bulges slightly back into the Left Atrium during early LV contraction.";
+                    if (p < 0.50) return "Atrial Reservoir Filling ('v' wave rises to ~12 mmHg): Mitral valve is closed; oxygenated blood continuously enters LA from the 4 Pulmonary Veins.";
+                    return "Conduit Phase ('y' descent): Mitral valve opens; stored blood rapidly empties into the relaxing Left Ventricle.";
+                }
+            },
+            "RA": {
+                id: "RA",
+                name: "Right Atrium (RA)",
+                latin: "Atrium dextrum",
+                category: "Cardiac Chamber",
+                colorBadge: "sky",
+                o2Badge: "SvO₂ 75%",
+                supply: "Right Coronary Artery (RCA) & Sinoatrial Nodal Artery",
+                pressure: "2–6 mmHg",
+                pressureSub: "Mean CVP (a/c/v waves)",
+                volume: "45–70 mL",
+                volumeSub: "Max Atrial Volume",
+                o2: "75% SvO₂",
+                o2Sub: "SVC / IVC / Coronary Sinus",
+                focusPos: { x: -1.1, y: 0.75, z: 0.15 },
+                camOffset: { x: -4.8, y: 1.5, z: 4.5 },
+                description: "Forms the right border of the heart. Divided internally by the crista terminalis into a smooth posterior sinus venarum (receiving the SVC, IVC, and Coronary Sinus) and a rough anterior muscular wall with pectinate muscles. Houses the SA Node, AV Node (Triangle of Koch), and Fossa Ovalis.",
+                auscultation: "Evaluated clinically via Jugular Venous Pulse (JVP) inspection in the right internal jugular vein.",
+                pearls: [
+                    "JVP Waveform Abnormalities: Cannon 'a' waves occur in Complete (3rd Degree) Heart Block when the RA contracts against a closed Tricuspid valve; giant 'v' waves indicate Tricuspid Regurgitation.",
+                    "Triangle of Koch: Bounded by the tendon of Todaro, septal leaflet of the tricuspid valve, and coronary sinus ostium — critical surgical landmark housing the AV Node.",
+                    "Patent Foramen Ovale (PFO): Failure of septum primum and septum secundum fusion in the interatrial septum allows paradoxical embolism (DVT -> systemic stroke)."
+                ],
+                phaseStatus: (p) => {
+                    if (p < 0.11) return "Atrial Systole (JVP 'a' wave ~6 mmHg): Pectinate muscles contract following SA node firing, propelling venous blood into the RV.";
+                    if (p < 0.18) return "Tricuspid Closure (JVP 'c' wave): Septal/anterior tricuspid leaflets billow toward RA as RV begins contraction.";
+                    if (p < 0.50) return "Venous Inflow (JVP 'x' descent then 'v' wave): RA fills continuously from Superior/Inferior Venae Cavae and Coronary Sinus while Tricuspid valve is closed.";
+                    return "Rapid Atrial Emptying (JVP 'y' descent): Tricuspid valve opens and RA decompresses into the right ventricle.";
+                }
+            },
+            "MV": {
+                id: "MV",
+                name: "Mitral (Bicuspid) Valve",
+                latin: "Valva atrioventricularis sinistra",
+                category: "Atrioventricular Valve",
+                colorBadge: "amber",
+                o2Badge: "SaO₂ 98%",
+                supply: "Avascular leaflets (nourished by diffusion); annulus supplied by LCx",
+                pressure: "0 mmHg Gradient",
+                pressureSub: "Diastolic Open State",
+                volume: "4.0–6.0 cm²",
+                volumeSub: "Normal Orifice Area",
+                o2: "98% SaO₂",
+                o2Sub: "LA -> LV Conduit",
+                focusPos: { x: 0.65, y: 0.2, z: 0.0 },
+                camOffset: { x: 3.4, y: 0.6, z: 4.0 },
+                description: "Dual-leaflet (anterior/aortic and posterior/mural) atrioventricular valve anchored by fibrous chordae tendineae to the anterolateral and posteromedial LV papillary muscles. Prevents systolic regurgitation into the left atrium against ~120 mmHg pressure.",
+                auscultation: "5th Left Intercostal Space, Midclavicular Line (Cardiac Apex). Best heard with patient in Left Lateral Decubitus position.",
+                pearls: [
+                    "Mitral Stenosis (MS): Classic sequela of Rheumatic Fever (99% of cases); orifice <2.0 cm² produces an opening snap followed by a low-pitched diastolic rumble (heard best with bell).",
+                    "Mitral Regurgitation (MR): Produces a blowing holosystolic murmur at the apex radiating to the left axilla; acute MR occurs after posteromedial papillary muscle rupture (RCA infarction).",
+                    "Mitral Valve Prolapse (MVP): Myxomatous degeneration (FBN1/Marfan or sporadic) causes a mid-systolic click followed by a late systolic murmur that moves earlier with standing/Valsalva."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.11 && p < 0.50) return "CLOSED (Systole): Coapted tightly under high LV pressure (120 mmHg); chordae tendineae and contracting papillary muscles prevent leaflet eversion into LA.";
+                    if (p < 0.11) return "OPEN (Late Diastole / Atrial Kick): Leaflets part widely to transmit atrial contraction wave into LV.";
+                    return "OPEN (Diastolic Ventricular Filling): Leaflets swing open into LV cavity as LA pressure exceeds LV pressure.";
+                }
+            },
+            "TV": {
+                id: "TV",
+                name: "Tricuspid Valve",
+                latin: "Valva atrioventricularis dextra",
+                category: "Atrioventricular Valve",
+                colorBadge: "amber",
+                o2Badge: "SvO₂ 75%",
+                supply: "Avascular leaflets; fibrous ring supplied by Right Coronary Artery (RCA)",
+                pressure: "0 mmHg Gradient",
+                pressureSub: "Diastolic Open State",
+                volume: "7.0–9.0 cm²",
+                volumeSub: "Largest Cardiac Valve",
+                o2: "75% SvO₂",
+                o2Sub: "RA -> RV Conduit",
+                focusPos: { x: -0.65, y: 0.15, z: 0.25 },
+                camOffset: { x: -3.2, y: 0.5, z: 4.2 },
+                description: "Three-leaflet (anterior, posterior, and septal) right atrioventricular valve tethered via chordae tendineae to three RV papillary muscles. The septal leaflet forms an anatomical border of the Triangle of Koch near the AV node and His bundle.",
+                auscultation: "4th–5th Left Intercostal Space at the Lower Left Sternal Border. Right-sided murmurs increase in intensity with inspiration (Carvallo's sign).",
+                pearls: [
+                    "Infective Endocarditis in IVDU: Staphylococcus aureus, Pseudomonas, or Candida preferentially seed the Tricuspid Valve, causing septic pulmonary emboli.",
+                    "Tricuspid Regurgitation: Causes a holosystolic murmur at the LLSB (louder on inspiration), pulsatile hepatomegaly, and prominent JVP 'v' waves.",
+                    "Ebstein Anomaly: Congenital apical displacement of septal/posterior tricuspid leaflets ('atrialization' of the RV), strongly associated with maternal lithium exposure and WPW accessory pathways."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.11 && p < 0.50) return "CLOSED (Systole): Prevents backflow into the Right Atrium during RV contraction (T1 component of S1 sound).";
+                    return "OPEN (Diastole): Leaflets open toward RV apex, permitting low-resistance venous filling from RA.";
+                }
+            },
+            "AV": {
+                id: "AV",
+                name: "Aortic Semilunar Valve",
+                latin: "Valva aortae",
+                category: "Semilunar Valve",
+                colorBadge: "amber",
+                o2Badge: "SaO₂ 98%",
+                supply: "Avascular cusps; Sinuses of Valsalva give rise to Left & Right Coronary Ostia",
+                pressure: "< 2 mmHg Gradient",
+                pressureSub: "Systolic Open State",
+                volume: "3.0–4.0 cm²",
+                volumeSub: "Normal Valve Area",
+                o2: "98% SaO₂",
+                o2Sub: "LVOT -> Ascending Aorta",
+                focusPos: { x: 0.18, y: 0.38, z: 0.05 },
+                camOffset: { x: 2.5, y: 0.9, z: 3.6 },
+                description: "Tricuspid semilunar valve (Right, Left, and Posterior/Non-coronary cusps) situated between the Left Ventricular Outflow Tract (LVOT) and Ascending Aorta. Above the right and left cusps lie the Sinuses of Valsalva, which fill during diastole to perfuse the RCA and LCA.",
+                auscultation: "2nd Right Intercostal Space at the Upper Right Sternal Border (Aortic Area); Aortic Regurgitation is best heard at Erb's Point (3rd LICS).",
+                pearls: [
+                    "Calcific Aortic Stenosis: Harsh crescendo-decrescendo systolic ejection murmur radiating to the carotids, pulsus parvus et tardus, and SAD triad (Syncope, Angina, Dyspnea). Severe AS < 1.0 cm².",
+                    "Bicuspid Aortic Valve: Present in ~1–2% of population (and associated with Turner Syndrome & Coarctation); predisposes to early dystrophic calcification in 40s–50s.",
+                    "Aortic Regurgitation: High-pitched 'blowing' early diastolic decrescendo murmur along left sternal border, wide pulse pressure, and bounding 'water-hammer' (Corrigan) pulses."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.18 && p < 0.42) return "OPEN (Ventricular Ejection): Semilunar cusps pressed open against aortic sinuses as high-velocity LV blood ejects into the Ascending Aorta.";
+                    if (p >= 0.42 && p < 0.50) return "CLOSING SNAP (A2 Sound & Dicrotic Notch): Elastic recoil of the aorta snaps cusps shut, generating the A2 component of S2 and the aortic dicrotic notch.";
+                    return "CLOSED (Diastole): Supports systemic arterial diastolic pressure (~80 mmHg) while blood in the Sinuses of Valsalva perfuses the coronary ostia.";
+                }
+            },
+            "PV": {
+                id: "PV",
+                name: "Pulmonary Semilunar Valve",
+                latin: "Valva trunci pulmonalis",
+                category: "Semilunar Valve",
+                colorBadge: "amber",
+                o2Badge: "SvO₂ 75%",
+                supply: "Avascular semilunar cusps (Anterior, Right, Left)",
+                pressure: "< 2 mmHg Gradient",
+                pressureSub: "Systolic Open State",
+                volume: "4.0 cm²",
+                volumeSub: "Normal Valve Area",
+                o2: "75% SvO₂",
+                o2Sub: "RV Infundibulum -> PA",
+                focusPos: { x: -0.25, y: 0.55, z: 0.55 },
+                camOffset: { x: -2.5, y: 1.2, z: 3.9 },
+                description: "Most anterior and superior of the four cardiac valves, situated at the summit of the RV conus arteriosus (infundibulum). Composed of three semilunar cusps (anterior, right, left) that prevent diastolic backflow from the pulmonary trunk.",
+                auscultation: "2nd Left Intercostal Space at the Upper Left Sternal Border (Pulmonic Area).",
+                pearls: [
+                    "Physiological S2 Splitting: Inspiration drops intrathoracic pressure -> increased venous return to RV -> prolonged RV ejection delays P2 closure relative to A2.",
+                    "Wide / Fixed Splitting: Seen in Atrial Septal Defect (ASD) due to chronic left-to-right shunt increasing RV volume independent of respiration.",
+                    "Tetralogy of Fallot: Anterior-superior malalignment of the infundibular septum causes Pulmonic Stenosis (primary determinant of cyanosis severity), RVH, overriding aorta, and VSD."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.18 && p < 0.42) return "OPEN (Systolic Ejection): Cusps open as RV pressure exceeds pulmonary artery diastolic pressure (~10 mmHg).";
+                    if (p >= 0.42 && p < 0.50) return "CLOSING (P2 Sound): Closes at end of RV ejection, producing the P2 component of the second heart sound.";
+                    return "CLOSED (Diastole): Coapted under pulmonary arterial diastolic pressure (8–10 mmHg).";
+                }
+            },
+            "AORTA": {
+                id: "AORTA",
+                name: "Ascending Aorta & Arch",
+                latin: "Aorta ascendens et Arcus aortae",
+                category: "Great Vessel (Arterial)",
+                colorBadge: "rose",
+                o2Badge: "SaO₂ 98%",
+                supply: "Vasa vasorum (outer tunica media) & luminal diffusion",
+                pressure: "120 / 80 mmHg",
+                pressureSub: "Mean (MAP) ~93 mmHg",
+                volume: "2.5–3.2 cm",
+                volumeSub: "Normal Root Diameter",
+                o2: "98% SaO₂",
+                o2Sub: "Systemic Outflow",
+                focusPos: { x: 0.25, y: 2.0, z: 0.0 },
+                camOffset: { x: 3.8, y: 2.8, z: 4.8 },
+                description: "Primary systemic arterial conduit rich in concentric elastic lamellae (Windkessel effect). Gives rise to the Left & Right Coronary Arteries at the root, then arches posteriorly over the left main bronchus giving off the Brachiocephalic trunk, Left Common Carotid, and Left Subclavian arteries.",
+                auscultation: "2nd Right ICS and Suprasternal Notch / Carotid arteries (for radiated murmurs or bruits).",
+                pearls: [
+                    "Windkessel Effect: Elastic expansion of the proximal aorta during systole stores potential energy, then recoils during diastole to maintain continuous organ & coronary perfusion (80 mmHg).",
+                    "Stanford Type A Aortic Dissection: Intimal tear in ascending aorta (associated with hypertension or Marfan cystic medial necrosis); surgical emergency due to risk of cardiac tamponade and acute AR.",
+                    "Aortic Arch Baroreceptors: Stretch receptors in the aortic arch transmit afferent signals via the Vagus Nerve (CN X) to the solitary nucleus to regulate blood pressure."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.18 && p < 0.42) return "Systolic Distension: Aortic wall stretches elastically as ~75 mL stroke volume is rapidly injected, raising pressure from 80 to 120 mmHg.";
+                    if (p >= 0.42 && p < 0.50) return "Dicrotic Recoil: Elastic rebound closes the aortic valve, creating the characteristic dicrotic notch on the arterial pressure waveform.";
+                    return "Diastolic Windkessel Runoff: Elastic recoil maintains forward systemic blood flow and drives retrograde perfusion into the coronary ostia.";
+                }
+            },
+            "PA": {
+                id: "PA",
+                name: "Pulmonary Trunk & Arteries",
+                latin: "Truncus pulmonalis",
+                category: "Great Vessel (Venous Blood)",
+                colorBadge: "sky",
+                o2Badge: "SvO₂ 75%",
+                supply: "Bronchial arteries & vasa vasorum",
+                pressure: "25 / 10 mmHg",
+                pressureSub: "Mean PAP ~14 mmHg",
+                volume: "2.4–2.8 cm",
+                volumeSub: "Main Trunk Diameter",
+                o2: "75% SvO₂",
+                o2Sub: "Deoxygenated to Lungs",
+                focusPos: { x: -0.35, y: 1.65, z: 0.5 },
+                camOffset: { x: -3.5, y: 2.5, z: 4.8 },
+                description: "Arises from the RV infundibulum anterior to the ascending aorta, coursing superiorly and posteriorly for ~5 cm before bifurcating beneath the aortic arch into the Right and Left Pulmonary Arteries. Connected to the inferior aortic arch via the Ligamentum Arteriosum (remnant of fetal ductus arteriosus).",
+                auscultation: "2nd Left Intercostal Space at Upper Left Sternal Border (loud P2 heard in Pulmonary Hypertension).",
+                pearls: [
+                    "Pulmonary Hypertension: Defined hemodynamically as resting Mean Pulmonary Arterial Pressure (mPAP) > 20 mmHg on right heart catheterization.",
+                    "Patent Ductus Arteriosus (PDA): Failure of ductus closure leaves a continuous 'machine-like' murmur at the left infraclavicular region due to continuous Ao -> PA flow.",
+                    "Saddle Pulmonary Embolism: Large thromboembolus lodging at the bifurcation of the Pulmonary Trunk causes sudden mechanical obstruction, acute RV failure, and obstructive shock."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.18 && p < 0.42) return "Systolic Pulsation: Receives deoxygenated stroke volume from the RV, pulsing to ~25 mmHg.";
+                    return "Diastolic Runoff: Low pulmonary vascular resistance allows smooth runoff into the alveolar capillary beds (dropping to ~10 mmHg).";
+                }
+            },
+            "VC": {
+                id: "VC",
+                name: "Superior & Inferior Venae Cavae",
+                latin: "Vena cava superior et inferior",
+                category: "Great Vessel (Venous)",
+                colorBadge: "sky",
+                o2Badge: "SvO₂ 72–77%",
+                supply: "Vasa vasorum",
+                pressure: "2–6 mmHg",
+                pressureSub: "Central Venous Pressure",
+                volume: "~5.0 L/min",
+                volumeSub: "Venous Return (= CO)",
+                o2: "75% SvO₂",
+                o2Sub: "SVC ~72% / IVC ~78%",
+                focusPos: { x: -1.45, y: 0.9, z: -0.2 },
+                camOffset: { x: -5.2, y: 1.4, z: 3.8 },
+                description: "Main systemic venous conduits returning deoxygenated blood from the head/upper extremities (SVC) and subdiaphragmatic body/hepatic veins (IVC) directly into the posterior smooth-walled sinus venarum of the Right Atrium.",
+                auscultation: "Evaluated via Internal Jugular Vein height (CVP estimation) and hepatojugular reflux.",
+                pearls: [
+                    "SVC Syndrome: Compression by right upper lobe bronchogenic carcinoma or mediastinal lymphoma causes facial plethora, upper extremity edema, and distended neck/chest wall veins.",
+                    "Kussmaul Sign: Paradoxical rise in JVP/SVC pressure during inspiration, seen in Constrictive Pericarditis, Restrictive Cardiomyopathy, and Severe RV Infarction.",
+                    "Eustachian Valve: Embryologic valve of the IVC orifice that in fetal life directed oxygenated umbilical blood across the Foramen Ovale."
+                ],
+                phaseStatus: (p) => {
+                    if (p < 0.11) return "Transient Retrograde Pressure Wave ('a' wave): Right atrial contraction briefly impedes caval inflow.";
+                    return "Continuous Venous Return: Driven by the pressure gradient between mean systemic filling pressure (~7 mmHg) and right atrial pressure (~2 mmHg), augmented by thoracic respiratory pump.";
+                }
+            },
+            "PVEINS": {
+                id: "PVEINS",
+                name: "Pulmonary Veins (4)",
+                latin: "Venae pulmonales (Sup. & Inf.)",
+                category: "Great Vessel (Oxygenated)",
+                colorBadge: "rose",
+                o2Badge: "SaO₂ 98%",
+                supply: "Left atrial myocardial sleeves extend 1–2 cm into ostia",
+                pressure: "8–10 mmHg",
+                pressureSub: "Matches LA / PCWP",
+                volume: "4 Ostia",
+                volumeSub: "R & L Superior/Inferior",
+                o2: "98% SaO₂",
+                o2Sub: "Freshly Oxygenated",
+                focusPos: { x: 1.35, y: 1.0, z: -0.6 },
+                camOffset: { x: 5.0, y: 1.6, z: -4.2 },
+                description: "Four valveless veins (Right & Left Superior and Inferior) that drain freshly oxygenated blood from the pulmonary capillary beds directly into the posterosuperior aspect of the Left Atrium.",
+                auscultation: "Assessed via transesophageal echocardiography (TEE) Doppler flow profiles (S, D, and AR waves).",
+                pearls: [
+                    "Catheter Ablation Target for AFib: Sleeves of atrial myocardium extending into the Pulmonary Vein ostia are the primary source (>90%) of ectopic automaticity triggering Atrial Fibrillation.",
+                    "Total Anomalous Pulmonary Venous Return (TAPVR): Congenital cyanotic defect where pulmonary veins drain into systemic venous circulation (creating a 'snowman' cardiac silhouette on CXR).",
+                    "Pulmonary Edema Flashback: When LA/LVEDP exceeds >20–25 mmHg, hydrostatic pressure backs up through the valveless pulmonary veins into alveolar capillaries."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.18 && p < 0.50) return "Systolic Forward Flow (S-wave): Descending mitral annulus during LV contraction expands LA volume, drawing oxygenated blood from the lungs.";
+                    return "Diastolic Conduit Flow (D-wave): Continuous flow through the open Left Atrium directly into the Left Ventricle.";
+                }
+            },
+            "SAN": {
+                id: "SAN",
+                name: "Sinoatrial (SA) Node",
+                latin: "Nodus sinuatrialis (Keith-Flack)",
+                category: "Conduction System",
+                colorBadge: "amber",
+                o2Badge: "Pacemaker",
+                supply: "SA Nodal Artery (arises from RCA in 60%, LCx in 40%)",
+                pressure: "60–100 BPM",
+                pressureSub: "Intrinsic Firing Rate",
+                volume: "Phase 4 Slope",
+                volumeSub: "If (Funny Na+/K+) Current",
+                o2: "Phase 0: Ca²⁺",
+                o2Sub: "L-type Ca²⁺ Upstroke",
+                focusPos: { x: -1.25, y: 1.15, z: 0.25 },
+                camOffset: { x: -3.8, y: 1.8, z: 3.8 },
+                description: "Primary physiological pacemaker of the heart, located subepicardially at the junction of the Superior Vena Cava and upper Right Atrium (crista terminalis). Generates spontaneous nodal action potentials that spread across both atria (Bachmann's bundle to LA) and via internodal tracts to the AV node.",
+                auscultation: "Correlates directly with the onset of the P-wave on surface ECG.",
+                pearls: [
+                    "Pacemaker Automaticity (Phase 4): Driven by hyperpolarization-activated cyclic nucleotide-gated (HCN) 'funny' channels (If current). Sympathetic beta-1 stimulation steepens Phase 4 slope; Vagal M2 stimulation flattens it.",
+                    "Sick Sinus Syndrome: Age-related fibrosis or RCA ischemia of the SA node causes sinus bradycardia, sinus pauses, and tachy-brady syndrome requiring permanent pacemaker implantation.",
+                    "Ivabradine Pharmacology: Selectively inhibits SA nodal If channels to slow heart rate in HFrEF without reducing myocardial contractility (inotropy)."
+                ],
+                phaseStatus: (p) => {
+                    if (p < 0.06) return "FIRING (Phase 0 Upstroke -> ECG P-Wave): Spontaneous threshold (-40 mV) reached; L-type Ca2+ channels open, initiating radial atrial depolarization wave.";
+                    if (p < 0.18) return "Repolarization (Phase 3): K+ efflux restores maximum diastolic potential (-60 mV).";
+                    return "Spontaneous Diastolic Depolarization (Phase 4): Slow inward Na+ 'funny' current (If) and T-type Ca2+ channels steadily drift membrane potential toward next firing threshold.";
+                }
+            },
+            "AVN": {
+                id: "AVN",
+                name: "Atrioventricular (AV) Node",
+                latin: "Nodus atrioventricularis (Aschoff-Tawara)",
+                category: "Conduction System",
+                colorBadge: "amber",
+                o2Badge: "0.1s Delay",
+                supply: "AV Nodal Artery (arises from PDA / RCA in 85–90% right-dominant hearts)",
+                pressure: "40–60 BPM",
+                pressureSub: "Junctional Escape Rate",
+                volume: "90–110 ms",
+                volumeSub: "Physiological PR Delay",
+                o2: "0.05 m/s",
+                o2Sub: "Slowest Conduction Velocity",
+                focusPos: { x: -0.25, y: 0.28, z: 0.1 },
+                camOffset: { x: -2.6, y: 0.7, z: 3.4 },
+                description: "Located in the posteroinferior interatrial septum within the Triangle of Koch. Serves as the sole electrical bridge through the insulating fibrous cardiac skeleton in normal hearts. Small cell diameter and sparse gap junctions (connexin-45) create an essential ~100 ms delay.",
+                auscultation: "Represented by the PR segment on the ECG; ensures atrial kick finishes before ventricular contraction begins.",
+                pearls: [
+                    "Physiological Purpose of AV Delay: Allows complete ventricular filling during atrial systole prior to ventricular excitation, and protects ventricles from dangerously rapid atrial rates (e.g., AFib/Flutter).",
+                    "Inferior MI & AV Block: RCA occlusion compromises the AV Nodal Artery, frequently causing 1st-degree, Mobitz Type I (Wenckebach), or transient Complete Heart Block.",
+                    "Adenosine & Class IV Antiarrhythmics (Verapamil/Diltiazem): Block nodal Ca2+ channels and increase K+ conductance in the AV node to terminate AV Nodal Reentrant Tachycardia (AVNRT)."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.04 && p < 0.11) return "PHYSIOLOGICAL DELAY ACTIVE (PR Segment): Conduction slows to 0.05 m/s through the AV node so the atria can finish emptying into the ventricles.";
+                    if (p >= 0.11 && p < 0.14) return "TRANSMITTING TO HIS BUNDLE: Impulse exits AV node into the penetrating Bundle of His to trigger the QRS complex.";
+                    return "Refractory / Resting State: Recovering excitability (effective refractory period prevents rapid retrograde or premature re-entry).";
+                }
+            },
+            "HIS": {
+                id: "HIS",
+                name: "Bundle of His, Bundle Branches & Purkinje Network",
+                latin: "Fasciculus atrioventricularis et Crura",
+                category: "Conduction System",
+                colorBadge: "amber",
+                o2Badge: "2–4 m/s Fast",
+                supply: "LAD Septal Perforators (90%) + AV Nodal Artery dual supply",
+                pressure: "20–40 BPM",
+                pressureSub: "Idioventricular Rate",
+                volume: "< 100 ms",
+                volumeSub: "Normal QRS Duration",
+                o2: "Phase 0: Na⁺",
+                o2Sub: "Fast Nav1.5 Channels",
+                focusPos: { x: 0.0, y: -0.45, z: 0.15 },
+                camOffset: { x: 0.0, y: -0.3, z: 4.6 },
+                description: "The Bundle of His penetrates the membranous septum and bifurcates at the crest of the muscular interventricular septum into the Right Bundle Branch (coursing down the moderator band) and Left Bundle Branch (dividing into anterior and posterior fascicles), terminating in high-velocity subendocardial Purkinje fibers.",
+                auscultation: "Produces the rapid, narrow QRS complex (<100 ms) on ECG; Bundle Branch Block causes wide QRS (>120 ms) and split S2.",
+                pearls: [
+                    "Ultrafast Conduction (2–4 m/s): Purkinje fibers are the fastest conducting myocytes in the heart due to large cell diameter, abundant Connexin-40/43 gap junctions, and high density of fast Na+ channels.",
+                    "Mobitz Type II Block: Infranodal disease in the His-Purkinje system (often after Anterior LAD MI) causes sudden dropped QRS complexes without PR lengthening; high risk of sudden progression to 3rd-degree block.",
+                    "Long Action Potential Duration: Purkinje fibers have the longest refractory period in the heart, acting as an electrical 'gate' to prevent premature ventricular contractions."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.11 && p < 0.18) return "RAPID DEPOLARIZATION WAVE (ECG QRS Complex): Impulse races down Septum -> Apex -> Base at 4 m/s, synchronizing biventricular contraction.";
+                    if (p >= 0.18 && p < 0.42) return "Plateau Phase (Phase 2 — ST Segment): Prolonged Ca2+ influx maintains refractory state during mechanical systole.";
+                    if (p >= 0.42 && p < 0.50) return "Ventricular Repolarization (ECG T-Wave): Outward K+ currents (IKr, IKs, IK1) restore resting membrane potential (-90 mV).";
+                    return "Resting Potential (Phase 4 at -90 mV): Awaiting next impulse from AV Node.";
+                }
+            },
+            "IVS": {
+                id: "IVS",
+                name: "Interventricular Septum (IVS)",
+                latin: "Septum interventriculare",
+                category: "Structural Anatomy",
+                colorBadge: "rose",
+                o2Badge: "Muscular & Membranous",
+                supply: "Anterior 2/3 via LAD Septal Perforators; Posterior 1/3 via PDA",
+                pressure: "120 vs 25 mmHg",
+                pressureSub: "LV-to-RV Pressure Gradient",
+                volume: "9–11 mm",
+                volumeSub: "Normal Septal Thickness",
+                o2: "Dual Supply",
+                o2Sub: "Conduction Highway",
+                focusPos: { x: 0.0, y: -0.65, z: 0.1 },
+                camOffset: { x: 0.2, y: -0.5, z: 4.5 },
+                description: "Stout obliqued partition separating the high-pressure Left Ventricle from the low-pressure Right Ventricle. Consists of a thick inferior muscular septum and a thin superior fibrous membranous septum (site of the His bundle penetration and most congenital VSDs).",
+                auscultation: "Ventricular Septal Defects (VSD) produce a harsh, loud holosystolic murmur at the Lower Left Sternal Border with a palpable thrill.",
+                pearls: [
+                    "Hypertrophic Obstructive Cardiomyopathy (HOCM): Autosomal dominant beta-myosin heavy chain mutation causes asymmetric septal hypertrophy (>15 mm) and systolic anterior motion (SAM) of the mitral valve, obstructing the LVOT.",
+                    "Post-MI Ventricular Septal Rupture: Occurs 3–7 days after transmural LAD or RCA infarction due to macrophage-mediated necrotic tissue degradation, causing acute left-to-right shunt and shock.",
+                    "Membranous VSD: Most common congenital cardiac anomaly; left-to-right shunt increases pulmonary blood flow and LV volume preload."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.11 && p < 0.42) return "Systolic Thickening & Torsion: Septum depolarizes first (from left-to-right, generating ECG Q-waves) and stiffens to anchor biventricular ejection.";
+                    return "Diastolic Compliance: Relaxes to allow normal ventricular geometry without bowing into either chamber.";
+                }
+            },
+            "PAP": {
+                id: "PAP",
+                name: "Papillary Muscles & Chordae Tendineae",
+                latin: "Musculi papillares et Chordae tendineae",
+                category: "Subvalvular Apparatus",
+                colorBadge: "rose",
+                o2Badge: "Subendocardial",
+                supply: "Anterolateral: Dual (LAD + LCx) | Posteromedial: Single (PDA)",
+                pressure: "Tensile Anchor",
+                pressureSub: "Prevents Leaflet Prolapse",
+                volume: "5 Major Muscles",
+                volumeSub: "2 in LV, 3 in RV",
+                o2: "High O₂ Demand",
+                o2Sub: "Watershed Vulnerability",
+                focusPos: { x: 0.75, y: -0.55, z: 0.15 },
+                camOffset: { x: 3.1, y: -0.3, z: 3.6 },
+                description: "Conical muscular projections from the ventricular walls tethered to the free edges of the Mitral and Tricuspid leaflets via collagenous chordae tendineae ('heartstrings'). They do NOT close the valves; rather, they contract isometrically during systole to prevent leaflet inversion into the atria.",
+                auscultation: "Dysfunction or rupture produces an acute apical (MR) or lower sternal border (TR) holosystolic murmur.",
+                pearls: [
+                    "Posteromedial vs. Anterolateral Rupture: The Posteromedial papillary muscle is 6–10x more likely to rupture after an MI because it has a single blood supply (PDA), whereas the Anterolateral muscle has dual supply (LAD + LCx).",
+                    "Chordae Tendineae Rupture: Can occur spontaneously in myxomatous mitral valve disease or subacute bacterial endocarditis, causing a 'flail mitral leaflet' and flash pulmonary edema."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.11 && p < 0.42) return "ACTIVE ISOMETRIC CONTRACTION: Contracting simultaneously with the ventricular walls to maintain taut tension on the chordae tendineae as LV pressure hits 120 mmHg.";
+                    return "RELAXED (Slack Chordae): Papillary muscles relax during diastole, allowing AV valve leaflets to part freely into the ventricles.";
+                }
+            },
+            "COR": {
+                id: "COR",
+                name: "Coronary Arteries (LAD, LCx & RCA)",
+                latin: "Arteriae coronariae sinistra et dextra",
+                category: "Coronary Vasculature",
+                colorBadge: "rose",
+                o2Badge: "Diastolic Perfusion",
+                supply: "Originate from Right & Left Sinuses of Valsalva directly above Aortic Valve",
+                pressure: "80 mmHg Driving P",
+                pressureSub: "CPP = Ao Diastolic - LVEDP",
+                volume: "250 mL/min",
+                volumeSub: "5% of Cardiac Output",
+                o2: "65–75% Extraction",
+                o2Sub: "Highest O₂ Extraction in Body",
+                focusPos: { x: 0.4, y: 0.1, z: 0.85 },
+                camOffset: { x: 2.8, y: 0.6, z: 4.5 },
+                description: "Epicardial arterial network supplying the myocardium. The Left Main Coronary Artery (LMCA) bifurcates into the Left Anterior Descending (LAD — anterior interventricular groove) and Left Circumflex (LCx — left atrioventricular groove). The Right Coronary Artery (RCA) courses in the right AV groove, giving rise to the PDA in 85% of individuals.",
+                auscultation: "Not directly auscultated; ischemia manifests on 12-lead ECG (ST-segment elevation/depression and T-wave inversion in contiguous leads).",
+                pearls: [
+                    "Unique Diastolic Perfusion: Unlike all other organs, Left Ventricular coronary flow peaks during DIASTOLE because systolic myocardial contraction compresses intramyocardial vessels. Tachycardia shortens diastole and worsens ischemia!",
+                    "Territorial Infarction Mapping: LAD ('Widowmaker') -> V1–V4 (Anterior/Septal); LCx -> I, aVL, V5–V6 (Lateral); RCA -> II, III, aVF (Inferior + RV).",
+                    "Near-Maximal O₂ Extraction: Myocardium extracts ~70% of arterial O₂ at rest (coronary sinus SvO₂ is only ~25–30%); thus, increased O₂ demand can ONLY be met by nitric-oxide/adenosine-mediated coronary vasodilation."
+                ],
+                phaseStatus: (p) => {
+                    if (p >= 0.11 && p < 0.42) return "SYSTOLIC COMPRESSION (Reduced LV Flow): High intramyocardial wall stress (120 mmHg) compresses subendocardial vessels, momentarily halting forward LV coronary perfusion.";
+                    return "PEAK DIASTOLIC PERFUSION: Aortic valve closes; aortic root pressure (80 mmHg) minus low LVEDP (8 mmHg) drives robust oxygenated blood flow through the relaxed myocardium.";
+                }
+            }
+        };
+
+        const ANATOMICAL_ORDER = [
+            "LV", "RV", "LA", "RA",
+            "MV", "TV", "AV", "PV",
+            "AORTA", "PA", "VC", "PVEINS", "COR",
+            "SAN", "AVN", "HIS",
+            "IVS", "PAP"
+        ];
+    </script>
+
+    <script>
+        // --- GLOBAL SIMULATION STATE ---
+        const simState = {
+            isPlaying: true,
+            speed: 1.0,
+            bpm: 75,
+            cyclePhase: 0.22, // 0.0 to 1.0 normalized cardiac cycle
+            selectedId: "LV",
+            hoveredId: null,
+            autoDim: true,
+            cutawayEnabled: true,
+            cutawayDepth: 0.35,
+            layers: {
+                myocardium: true,
+                conduction: true,
+                particles: true,
+                coronary: true,
+                pins: true
+            }
+        };
+
+        // --- THREE.JS GLOBALS ---
+        let scene, camera, renderer, controls;
+        let heartRootGroup;
+        let clippingPlane;
+        const selectableMeshes = [];
+        const entityMeshMap = {}; // id -> array of meshes
+        const pinElements = {};   // id -> DOM element
+
+        // Dynamic animation groups
+        let lvChamberGroup, rvChamberGroup, laChamberGroup, raChamberGroup, outerMyocardiumGroup;
+        let mitralLeaflets = [], tricuspidLeaflets = [], aorticLeaflets = [], pulmonaryLeaflets = [];
+        let papillaryMuscles = [], chordaeLines = [];
+        let conductionNodes = [], conductionTubes = [], apPulseSpheres = [];
+        let oxyParticleMesh, deoxyParticleMesh;
+        let oxyParticleData = [], deoxyParticleData = [];
+
+        // Camera Tweening state
+        const cameraTargetPos = new THREE.Vector3(0, 0.8, 10.5);
+        const controlsTargetLook = new THREE.Vector3(0, 0.1, 0);
+        let isCameraTweening = false;
+
+        function initThreeScene() {
+            const container = document.getElementById('canvas-container');
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 0.8, 10.5);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.localClippingEnabled = true;
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.15;
+            container.appendChild(renderer.domElement);
+
+            // OrbitControls with smooth medical damping
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.06;
+            controls.minDistance = 3.2;
+            controls.maxDistance = 19.0;
+            controls.target.set(0, 0.1, 0);
+
+            // Stop automatic camera lerp if user manually orbits
+            controls.addEventListener('start', () => {
+                isCameraTweening = false;
+            });
+
+            // Coronal Cutaway Clipping Plane (clips anterior Z > cutawayDepth)
+            clippingPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), simState.cutawayDepth);
+
+            // --- STUDIO MEDICAL LIGHTING ---
+            const hemiLight = new THREE.HemisphereLight(0xdbeafe, 0x1e1b4b, 0.65);
+            scene.add(hemiLight);
+
+            // Primary Surgical Key Light
+            const keyLight = new THREE.DirectionalLight(0xfff7ed, 1.35);
+            keyLight.position.set(6, 9, 8);
+            keyLight.castShadow = true;
+            scene.add(keyLight);
+
+            // Cool Rim Light to delineate great vessels
+            const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.95);
+            rimLight.position.set(-7, 5, -6);
+            scene.add(rimLight);
+
+            // Warm Inferior Fill Light for subvalvular apparatus
+            const fillLight = new THREE.DirectionalLight(0xfda4af, 0.55);
+            fillLight.position.set(2, -7, 5);
+            scene.add(fillLight);
+
+            // Subtle anatomical grid floor reference
+            const gridHelper = new THREE.GridHelper(16, 32, 0x1e293b, 0x0f172a);
+            gridHelper.position.y = -3.6;
+            scene.add(gridHelper);
+
+            heartRootGroup = new THREE.Group();
+            scene.add(heartRootGroup);
+
+            buildProceduralHeartModel();
+            buildConductionSystem();
+            buildHemodynamicParticleSystems();
+            initFloatingPins();
+            initRaycasting();
+        }
+    </script>
+
+    <script>
+        // Helper to register selectable anatomical meshes
+        function registerAnatomicalMesh(mesh, id, clippable = false) {
+            mesh.userData.anatomyId = id;
+            mesh.userData.baseEmissive = mesh.material.emissive ? mesh.material.emissive.clone() : new THREE.Color(0x000000);
+            mesh.userData.baseOpacity = mesh.material.opacity !== undefined ? mesh.material.opacity : 1.0;
+            mesh.userData.baseTransparent = mesh.material.transparent || false;
+            mesh.userData.clippable = clippable;
+
+            if (clippable && simState.cutawayEnabled) {
+                mesh.material.clippingPlanes = [clippingPlane];
+                mesh.material.clipShadows = true;
+            }
+
+            selectableMeshes.push(mesh);
+            if (!entityMeshMap[id]) entityMeshMap[id] = [];
+            entityMeshMap[id].push(mesh);
+        }
+
+        function createTissueMaterial(colorHex, roughness = 0.38, metalness = 0.06, opacity = 1.0, doubleSided = true) {
+            return new THREE.MeshPhysicalMaterial({
+                color: colorHex,
+                roughness: roughness,
+                metalness: metalness,
+                clearcoat: 0.35,
+                clearcoatRoughness: 0.25,
+                transparent: opacity < 1.0,
+                opacity: opacity,
+                side: doubleSided ? THREE.DoubleSide : THREE.FrontSide
+            });
+        }
+
+        function buildProceduralHeartModel() {
+            // 1. SEMI-TRANSPARENT EXTERIOR MYOCARDIUM SHELL (Clippable)
+            outerMyocardiumGroup = new THREE.Group();
+            const epicardialMat = createTissueMaterial(0x9f1239, 0.35, 0.05, 0.42, true);
+            epicardialMat.emissive = new THREE.Color(0x25040d);
+
+            const outerGeo = new THREE.SphereGeometry(2.15, 48, 48);
+            // Sculpt ventricular apex tilt
+            const posAttr = outerGeo.attributes.position;
+            for (let i = 0; i < posAttr.count; i++) {
+                let x = posAttr.getX(i);
+                let y = posAttr.getY(i);
+                let z = posAttr.getZ(i);
+                if (y < 0) {
+                    const taper = 1.0 + (y / 2.2) * 0.42;
+                    x *= taper;
+                    z *= taper * 0.85;
+                    x += (-y * 0.22); // Apex points inferiorly and to the left (+X)
+                } else {
+                    y *= 0.65;
+                    z *= 0.82;
+                }
+                posAttr.setXYZ(i, x, y, z);
+            }
+            outerGeo.computeVertexNormals();
+            const outerShellMesh = new THREE.Mesh(outerGeo, epicardialMat);
+            outerShellMesh.position.set(0.05, -0.35, 0.05);
+            outerShellMesh.userData.clippable = true;
+            outerShellMesh.material.clippingPlanes = [clippingPlane];
+            outerMyocardiumGroup.add(outerShellMesh);
+            heartRootGroup.add(outerMyocardiumGroup);
+
+            // 2. INTERVENTRICULAR SEPTUM (IVS)
+            const ivsMat = createTissueMaterial(0xbe123c, 0.42, 0.05, 1.0, true);
+            const ivsCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-0.08, 0.35, 0.05),
+                new THREE.Vector3(-0.02, -0.45, 0.12),
+                new THREE.Vector3(0.18, -1.35, 0.08),
+                new THREE.Vector3(0.45, -2.05, 0.02)
+            ]);
+            const ivsGeo = new THREE.TubeGeometry(ivsCurve, 32, 0.24, 16, false);
+            ivsGeo.scale(0.65, 1.0, 2.6);
+            const ivsMesh = new THREE.Mesh(ivsGeo, ivsMat);
+            registerAnatomicalMesh(ivsMesh, "IVS", true);
+            heartRootGroup.add(ivsMesh);
+
+            // 3. LEFT VENTRICLE (LV) — Thick-walled conical high-pressure chamber
+            lvChamberGroup = new THREE.Group();
+            const lvMat = createTissueMaterial(0xdc2626, 0.35, 0.08, 0.94, true);
+            const lvGeo = new THREE.SphereGeometry(1.18, 40, 40);
+            const lvPos = lvGeo.attributes.position;
+            for (let i = 0; i < lvPos.count; i++) {
+                let x = lvPos.getX(i);
+                let y = lvPos.getY(i);
+                let z = lvPos.getZ(i);
+                // Flatten medial septal side
+                if (x < -0.2) x = -0.2 + (x + 0.2) * 0.3;
+                // Elongate apex
+                if (y < 0) {
+                    y *= 1.45;
+                    const factor = Math.max(0.25, 1.0 + y / 2.2);
+                    x *= factor;
+                    z *= factor;
+                } else {
+                    y *= 0.55;
+                }
+                lvPos.setXYZ(i, x, y, z);
+            }
+            lvGeo.computeVertexNormals();
+            const lvMesh = new THREE.Mesh(lvGeo, lvMat);
+            lvMesh.position.set(0.75, -0.52, 0.0);
+            registerAnatomicalMesh(lvMesh, "LV", true);
+            lvChamberGroup.add(lvMesh);
+
+            // Endocardial Trabeculae & Inner Cavity Rim for LV
+            const lvEndoMat = createTissueMaterial(0x881337, 0.5, 0.05, 1.0, true);
+            const lvRingGeo = new THREE.TorusGeometry(0.68, 0.14, 16, 36);
+            lvRingGeo.rotateX(Math.PI / 2);
+            const lvRingMesh = new THREE.Mesh(lvRingGeo, lvEndoMat);
+            lvRingMesh.position.set(0.72, 0.12, 0.0);
+            registerAnatomicalMesh(lvRingMesh, "LV", true);
+            lvChamberGroup.add(lvRingMesh);
+            heartRootGroup.add(lvChamberGroup);
+
+            // 4. RIGHT VENTRICLE (RV) — Crescentic anterior/right volume chamber
+            rvChamberGroup = new THREE.Group();
+            const rvMat = createTissueMaterial(0x2563eb, 0.38, 0.08, 0.88, true);
+            const rvGeo = new THREE.SphereGeometry(1.12, 40, 40);
+            const rvPos = rvGeo.attributes.position;
+            for (let i = 0; i < rvPos.count; i++) {
+                let x = rvPos.getX(i);
+                let y = rvPos.getY(i);
+                let z = rvPos.getZ(i);
+                if (x > 0.25) x = 0.25 + (x - 0.25) * 0.25;
+                if (y < 0) {
+                    y *= 1.25;
+                    const f = Math.max(0.35, 1.0 + y / 2.1);
+                    x *= f;
+                    z *= f;
+                } else {
+                    y *= 0.65;
+                }
+                rvPos.setXYZ(i, x, y, z);
+            }
+            rvGeo.computeVertexNormals();
+            const rvMesh = new THREE.Mesh(rvGeo, rvMat);
+            rvMesh.position.set(-0.72, -0.5, 0.22);
+            registerAnatomicalMesh(rvMesh, "RV", true);
+            rvChamberGroup.add(rvMesh);
+            heartRootGroup.add(rvChamberGroup);
+
+            // 5. LEFT ATRIUM (LA) & Left Atrial Appendage
+            laChamberGroup = new THREE.Group();
+            const laMat = createTissueMaterial(0xe11d48, 0.35, 0.05, 0.92, true);
+            const laGeo = new THREE.SphereGeometry(0.76, 32, 32);
+            laGeo.scale(1.12, 0.88, 0.95);
+            const laMesh = new THREE.Mesh(laGeo, laMat);
+            laMesh.position.set(0.85, 0.85, -0.28);
+            registerAnatomicalMesh(laMesh, "LA", true);
+            laChamberGroup.add(laMesh);
+
+            // Left Atrial Appendage (LAA)
+            const laaGeo = new THREE.ConeGeometry(0.28, 0.65, 16);
+            laaGeo.rotateZ(-Math.PI / 3);
+            const laaMesh = new THREE.Mesh(laaGeo, laMat.clone());
+            laaMesh.position.set(1.48, 0.95, 0.22);
+            registerAnatomicalMesh(laaMesh, "LA", true);
+            laChamberGroup.add(laaMesh);
+            heartRootGroup.add(laChamberGroup);
+
+            // 6. RIGHT ATRIUM (RA)
+            raChamberGroup = new THREE.Group();
+            const raMat = createTissueMaterial(0x1d4ed8, 0.36, 0.06, 0.9, true);
+            const raGeo = new THREE.SphereGeometry(0.8, 32, 32);
+            raGeo.scale(1.05, 0.95, 0.95);
+            const raMesh = new THREE.Mesh(raGeo, raMat);
+            raMesh.position.set(-0.98, 0.72, 0.05);
+            registerAnatomicalMesh(raMesh, "RA", true);
+            raChamberGroup.add(raMesh);
+            heartRootGroup.add(raChamberGroup);
+
+            // 7. FOUR CARDIAC VALVES WITH DYNAMIC MOVING LEAFLETS
+            buildCardiacValves();
+
+            // 8. PAPILLARY MUSCLES & CHORDAE TENDINEAE
+            buildSubvalvularApparatus();
+
+            // 9. GREAT VESSELS & CORONARY VASCULATURE
+            buildGreatVesselsAndCoronaries();
+        }
+
+        function buildCardiacValves() {
+            const annulusMat = createTissueMaterial(0xfef3c7, 0.4, 0.1, 1.0, true);
+            const leafletMat = createTissueMaterial(0xfde68a, 0.25, 0.05, 0.95, true);
+
+            // --- MITRAL VALVE (Bicuspid: Anterior & Posterior Leaflets) ---
+            const mvGroup = new THREE.Group();
+            mvGroup.position.set(0.68, 0.22, -0.05);
+            const mvRing = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.045, 14, 32), annulusMat.clone());
+            mvRing.rotation.x = Math.PI / 2;
+            mvRing.rotation.y = -0.15;
+            registerAnatomicalMesh(mvRing, "MV", false);
+            mvGroup.add(mvRing);
+
+            for (let i = 0; i < 2; i++) {
+                const pivot = new THREE.Group();
+                const angle = i * Math.PI;
+                pivot.position.set(Math.cos(angle) * 0.28, 0, Math.sin(angle) * 0.1);
+                pivot.rotation.y = -angle;
+                const cuspGeo = new THREE.CircleGeometry(0.32, 18, -Math.PI / 2.2, Math.PI / 1.1);
+                cuspGeo.rotateX(Math.PI / 2);
+                const cuspMesh = new THREE.Mesh(cuspGeo, leafletMat.clone());
+                registerAnatomicalMesh(cuspMesh, "MV", false);
+                pivot.add(cuspMesh);
+                mvGroup.add(pivot);
+                mitralLeaflets.push({ pivot, dir: 1 });
+            }
+            heartRootGroup.add(mvGroup);
+
+            // --- TRICUSPID VALVE (3 Leaflets) ---
+            const tvGroup = new THREE.Group();
+            tvGroup.position.set(-0.68, 0.16, 0.22);
+            const tvRing = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.045, 14, 32), annulusMat.clone());
+            tvRing.rotation.x = Math.PI / 2;
+            tvRing.rotation.y = 0.2;
+            registerAnatomicalMesh(tvRing, "TV", false);
+            tvGroup.add(tvRing);
+
+            for (let i = 0; i < 3; i++) {
+                const pivot = new THREE.Group();
+                const angle = (i * 2 * Math.PI) / 3;
+                pivot.position.set(Math.cos(angle) * 0.3, 0, Math.sin(angle) * 0.3);
+                pivot.rotation.y = -angle + Math.PI / 2;
+                const cuspGeo = new THREE.CircleGeometry(0.31, 16, 0, Math.PI);
+                cuspGeo.rotateX(Math.PI / 2);
+                const cuspMesh = new THREE.Mesh(cuspGeo, leafletMat.clone());
+                registerAnatomicalMesh(cuspMesh, "TV", false);
+                pivot.add(cuspMesh);
+                tvGroup.add(pivot);
+                tricuspidLeaflets.push({ pivot });
+            }
+            heartRootGroup.add(tvGroup);
+
+            // --- AORTIC SEMILUNAR VALVE (3 Cusps) ---
+            const avGroup = new THREE.Group();
+            avGroup.position.set(0.22, 0.42, 0.02);
+            avGroup.rotation.z = -0.22;
+            const avRing = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.04, 14, 28), annulusMat.clone());
+            avRing.rotation.x = Math.PI / 2;
+            registerAnatomicalMesh(avRing, "AV", false);
+            avGroup.add(avRing);
+
+            for (let i = 0; i < 3; i++) {
+                const pivot = new THREE.Group();
+                const angle = (i * 2 * Math.PI) / 3;
+                pivot.position.set(Math.cos(angle) * 0.22, 0, Math.sin(angle) * 0.22);
+                pivot.rotation.y = -angle + Math.PI / 2;
+                const cuspGeo = new THREE.CircleGeometry(0.23, 14, 0, Math.PI);
+                cuspGeo.rotateX(Math.PI / 2);
+                const cuspMesh = new THREE.Mesh(cuspGeo, leafletMat.clone());
+                registerAnatomicalMesh(cuspMesh, "AV", false);
+                pivot.add(cuspMesh);
+                avGroup.add(pivot);
+                aorticLeaflets.push({ pivot });
+            }
+            heartRootGroup.add(avGroup);
+
+            // --- PULMONARY SEMILUNAR VALVE (3 Cusps) ---
+            const pvGroup = new THREE.Group();
+            pvGroup.position.set(-0.28, 0.56, 0.48);
+            pvGroup.rotation.z = 0.2;
+            const pvRing = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.04, 14, 28), annulusMat.clone());
+            pvRing.rotation.x = Math.PI / 2;
+            registerAnatomicalMesh(pvRing, "PV", false);
+            pvGroup.add(pvRing);
+
+            for (let i = 0; i < 3; i++) {
+                const pivot = new THREE.Group();
+                const angle = (i * 2 * Math.PI) / 3;
+                pivot.position.set(Math.cos(angle) * 0.22, 0, Math.sin(angle) * 0.22);
+                pivot.rotation.y = -angle + Math.PI / 2;
+                const cuspGeo = new THREE.CircleGeometry(0.23, 14, 0, Math.PI);
+                cuspGeo.rotateX(Math.PI / 2);
+                const cuspMesh = new THREE.Mesh(cuspGeo, leafletMat.clone());
+                registerAnatomicalMesh(cuspMesh, "PV", false);
+                pivot.add(cuspMesh);
+                pvGroup.add(pivot);
+                pulmonaryLeaflets.push({ pivot });
+            }
+            heartRootGroup.add(pvGroup);
+        }
+
+        function buildSubvalvularApparatus() {
+            const papMat = createTissueMaterial(0xf43f5e, 0.35, 0.05, 1.0, true);
+            const chordMat = createTissueMaterial(0xfef08a, 0.3, 0.1, 0.9, false);
+
+            const papPositions = [
+                // LV Anterolateral & Posteromedial Papillary Muscles
+                { pos: new THREE.Vector3(1.05, -0.88, 0.25), valveTarget: new THREE.Vector3(0.75, 0.18, 0.08) },
+                { pos: new THREE.Vector3(0.55, -0.95, -0.25), valveTarget: new THREE.Vector3(0.58, 0.18, -0.15) },
+                // RV Anterior & Posterior Papillary Muscles
+                { pos: new THREE.Vector3(-0.92, -0.82, 0.38), valveTarget: new THREE.Vector3(-0.75, 0.12, 0.28) },
+                { pos: new THREE.Vector3(-0.52, -0.86, 0.05), valveTarget: new THREE.Vector3(-0.55, 0.12, 0.12) }
+            ];
+
+            papPositions.forEach((item) => {
+                const coneGeo = new THREE.ConeGeometry(0.14, 0.52, 14);
+                const papMesh = new THREE.Mesh(coneGeo, papMat.clone());
+                papMesh.position.copy(item.pos);
+                papMesh.lookAt(item.valveTarget);
+                papMesh.rotateX(Math.PI / 2);
+                registerAnatomicalMesh(papMesh, "PAP", false);
+                heartRootGroup.add(papMesh);
+                papillaryMuscles.push(papMesh);
+
+                // Create 3 Chordae Tendineae strands per papillary muscle
+                for (let s = -1; s <= 1; s++) {
+                    const start = item.pos.clone().add(new THREE.Vector3(0, 0.18, 0));
+                    const end = item.valveTarget.clone().add(new THREE.Vector3(s * 0.09, 0, s * 0.05));
+                    const curve = new THREE.LineCurve3(start, end);
+                    const chordGeo = new THREE.TubeGeometry(curve, 8, 0.014, 6, false);
+                    const chordMesh = new THREE.Mesh(chordGeo, chordMat.clone());
+                    registerAnatomicalMesh(chordMesh, "PAP", false);
+                    heartRootGroup.add(chordMesh);
+                    chordaeLines.push(chordMesh);
+                }
+            });
+        }
+
+        function buildGreatVesselsAndCoronaries() {
+            // 1. ASCENDING AORTA, AORTIC ARCH & SUPRA-AORTIC TRUNKS
+            const aortaMat = createTissueMaterial(0xe11d48, 0.32, 0.08, 0.96, true);
+            const aortaCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.22, 0.42, 0.02),
+                new THREE.Vector3(0.32, 1.35, 0.08),
+                new THREE.Vector3(0.18, 2.25, -0.05),
+                new THREE.Vector3(-0.45, 2.38, -0.45),
+                new THREE.Vector3(-0.75, 1.55, -0.85),
+                new THREE.Vector3(-0.65, -0.8, -1.05)
+            ]);
+            const aortaGeo = new THREE.TubeGeometry(aortaCurve, 64, 0.34, 24, false);
+            const aortaMesh = new THREE.Mesh(aortaGeo, aortaMat);
+            registerAnatomicalMesh(aortaMesh, "AORTA", false);
+            heartRootGroup.add(aortaMesh);
+
+            // Brachiocephalic, Left Common Carotid, Left Subclavian branches
+            const archBranches = [
+                [new THREE.Vector3(0.22, 2.22, -0.05), new THREE.Vector3(0.35, 3.05, -0.05)],
+                [new THREE.Vector3(-0.08, 2.36, -0.22), new THREE.Vector3(-0.08, 3.12, -0.22)],
+                [new THREE.Vector3(-0.38, 2.32, -0.42), new THREE.Vector3(-0.45, 3.05, -0.42)]
+            ];
+            archBranches.forEach(pts => {
+                const brGeo = new THREE.TubeGeometry(new THREE.LineCurve3(pts[0], pts[1]), 12, 0.11, 14, false);
+                const brMesh = new THREE.Mesh(brGeo, aortaMat.clone());
+                registerAnatomicalMesh(brMesh, "AORTA", false);
+                heartRootGroup.add(brMesh);
+            });
+
+            // 2. PULMONARY TRUNK & RIGHT / LEFT PULMONARY ARTERIES
+            const paMat = createTissueMaterial(0x2563eb, 0.35, 0.08, 0.95, true);
+            const paTrunkCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-0.28, 0.56, 0.48),
+                new THREE.Vector3(-0.38, 1.25, 0.42),
+                new THREE.Vector3(-0.22, 1.72, 0.12)
+            ]);
+            const paTrunkMesh = new THREE.Mesh(new THREE.TubeGeometry(paTrunkCurve, 32, 0.3, 20, false), paMat);
+            registerAnatomicalMesh(paTrunkMesh, "PA", false);
+            heartRootGroup.add(paTrunkMesh);
+
+            // Left & Right PA Bifurcation
+            const lpaCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-0.22, 1.7, 0.12),
+                new THREE.Vector3(0.55, 1.78, -0.15),
+                new THREE.Vector3(1.55, 1.72, -0.35)
+            ]);
+            const rpaCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-0.22, 1.7, 0.12),
+                new THREE.Vector3(-0.95, 1.72, -0.15),
+                new THREE.Vector3(-1.75, 1.65, -0.35)
+            ]);
+            const lpaMesh = new THREE.Mesh(new THREE.TubeGeometry(lpaCurve, 24, 0.22, 16, false), paMat.clone());
+            const rpaMesh = new THREE.Mesh(new THREE.TubeGeometry(rpaCurve, 24, 0.22, 16, false), paMat.clone());
+            registerAnatomicalMesh(lpaMesh, "PA", false);
+            registerAnatomicalMesh(rpaMesh, "PA", false);
+            heartRootGroup.add(lpaMesh);
+            heartRootGroup.add(rpaMesh);
+
+            // 3. SUPERIOR & INFERIOR VENAE CAVAE (VC)
+            const vcMat = createTissueMaterial(0x1e40af, 0.38, 0.08, 0.95, true);
+            const svcCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-1.18, 2.75, -0.05),
+                new THREE.Vector3(-1.15, 1.65, 0.02),
+                new THREE.Vector3(-1.05, 0.95, 0.05)
+            ]);
+            const ivcCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-1.12, -2.35, -0.25),
+                new THREE.Vector3(-1.12, -0.75, -0.15),
+                new THREE.Vector3(-1.05, 0.35, -0.05)
+            ]);
+            const svcMesh = new THREE.Mesh(new THREE.TubeGeometry(svcCurve, 28, 0.26, 20, false), vcMat);
+            const ivcMesh = new THREE.Mesh(new THREE.TubeGeometry(ivcCurve, 28, 0.29, 20, false), vcMat.clone());
+            registerAnatomicalMesh(svcMesh, "VC", false);
+            registerAnatomicalMesh(ivcMesh, "VC", false);
+            heartRootGroup.add(svcMesh);
+            heartRootGroup.add(ivcMesh);
+
+            // 4. FOUR PULMONARY VEINS (PVEINS)
+            const pvMat = createTissueMaterial(0xf43f5e, 0.35, 0.06, 0.95, true);
+            const pvPaths = [
+                [new THREE.Vector3(2.05, 1.25, -0.45), new THREE.Vector3(1.15, 1.02, -0.35)],
+                [new THREE.Vector3(2.05, 0.65, -0.55), new THREE.Vector3(1.15, 0.72, -0.38)],
+                [new THREE.Vector3(-0.35, 1.18, -0.85), new THREE.Vector3(0.55, 1.0, -0.48)],
+                [new THREE.Vector3(-0.35, 0.68, -0.85), new THREE.Vector3(0.55, 0.72, -0.48)]
+            ];
+            pvPaths.forEach(pts => {
+                const pvMesh = new THREE.Mesh(
+                    new THREE.TubeGeometry(new THREE.LineCurve3(pts[0], pts[1]), 14, 0.13, 14, false),
+                    pvMat.clone()
+                );
+                registerAnatomicalMesh(pvMesh, "PVEINS", false);
+                heartRootGroup.add(pvMesh);
+            });
+
+            // 5. CORONARY ARTERIES (LAD, LCx, RCA)
+            const corMat = createTissueMaterial(0xef4444, 0.28, 0.15, 1.0, false);
+            corMat.emissive = new THREE.Color(0x450a0a);
+
+            // Left Anterior Descending (LAD) in Anterior Interventricular Groove
+            const ladCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.32, 0.48, 0.25),
+                new THREE.Vector3(0.22, 0.22, 0.85),
+                new THREE.Vector3(0.08, -0.45, 1.05),
+                new THREE.Vector3(0.28, -1.25, 0.88),
+                new THREE.Vector3(0.52, -1.92, 0.45)
+            ]);
+            // Diagonal branch of LAD
+            const diagCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.14, -0.25, 1.02),
+                new THREE.Vector3(0.78, -0.68, 0.95),
+                new THREE.Vector3(1.18, -1.18, 0.62)
+            ]);
+            // Left Circumflex (LCx)
+            const lcxCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.32, 0.48, 0.25),
+                new THREE.Vector3(0.95, 0.35, 0.65),
+                new THREE.Vector3(1.48, 0.18, 0.12),
+                new THREE.Vector3(1.35, -0.25, -0.65)
+            ]);
+            // Right Coronary Artery (RCA)
+            const rcaCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.05, 0.42, 0.28),
+                new THREE.Vector3(-0.68, 0.22, 0.88),
+                new THREE.Vector3(-1.28, -0.22, 0.68),
+                new THREE.Vector3(-1.15, -0.88, 0.05),
+                new THREE.Vector3(-0.35, -1.25, -0.68)
+            ]);
+
+            [ladCurve, diagCurve, lcxCurve, rcaCurve].forEach(curve => {
+                const cMesh = new THREE.Mesh(new THREE.TubeGeometry(curve, 36, 0.048, 12, false), corMat.clone());
+                registerAnatomicalMesh(cMesh, "COR", false);
+                heartRootGroup.add(cMesh);
+            });
+        }
+    </script>
+
+    <script>
+        function buildConductionSystem() {
+            const nodeMat = new THREE.MeshStandardMaterial({
+                color: 0xfbbf24,
+                emissive: 0xd97706,
+                emissiveIntensity: 0.9,
+                roughness: 0.2
+            });
+            const pathwayMat = new THREE.MeshStandardMaterial({
+                color: 0xfde047,
+                emissive: 0xb45309,
+                emissiveIntensity: 0.75,
+                roughness: 0.25
+            });
+
+            // 1. SINOATRIAL (SA) NODE (Junction of SVC & RA)
+            const saNodeGeo = new THREE.SphereGeometry(0.15, 24, 24);
+            saNodeGeo.scale(1.2, 0.8, 0.9);
+            const saNodeMesh = new THREE.Mesh(saNodeGeo, nodeMat.clone());
+            saNodeMesh.position.set(-1.12, 1.15, 0.25);
+            registerAnatomicalMesh(saNodeMesh, "SAN", false);
+            heartRootGroup.add(saNodeMesh);
+            conductionNodes.push({ mesh: saNodeMesh, type: "SAN" });
+
+            // Internodal Tracts (SA -> AV) & Bachmann's Bundle (SA -> LA)
+            const internodal1 = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-1.12, 1.15, 0.25),
+                new THREE.Vector3(-0.75, 0.78, 0.32),
+                new THREE.Vector3(-0.22, 0.28, 0.12)
+            ]);
+            const internodal2 = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-1.12, 1.15, 0.25),
+                new THREE.Vector3(-0.98, 0.55, -0.15),
+                new THREE.Vector3(-0.22, 0.28, 0.12)
+            ]);
+            const bachmannCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-1.12, 1.15, 0.25),
+                new THREE.Vector3(-0.15, 1.22, 0.05),
+                new THREE.Vector3(0.85, 1.05, -0.18)
+            ]);
+
+            [internodal1, internodal2, bachmannCurve].forEach(c => {
+                const m = new THREE.Mesh(new THREE.TubeGeometry(c, 24, 0.028, 8, false), pathwayMat.clone());
+                registerAnatomicalMesh(m, "SAN", false);
+                heartRootGroup.add(m);
+                conductionTubes.push({ mesh: m, curve: c, group: "atrial" });
+            });
+
+            // 2. ATRIOVENTRICULAR (AV) NODE (Triangle of Koch)
+            const avNodeGeo = new THREE.SphereGeometry(0.13, 24, 24);
+            const avNodeMesh = new THREE.Mesh(avNodeGeo, nodeMat.clone());
+            avNodeMesh.position.set(-0.22, 0.28, 0.12);
+            registerAnatomicalMesh(avNodeMesh, "AVN", false);
+            heartRootGroup.add(avNodeMesh);
+            conductionNodes.push({ mesh: avNodeMesh, type: "AVN" });
+
+            // 3. BUNDLE OF HIS, LEFT/RIGHT BUNDLE BRANCHES & PURKINJE FIBERS
+            const hisCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-0.22, 0.28, 0.12),
+                new THREE.Vector3(-0.05, 0.08, 0.14),
+                new THREE.Vector3(0.02, -0.18, 0.15)
+            ]);
+            const lbbCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.02, -0.18, 0.15),
+                new THREE.Vector3(0.22, -0.68, 0.15),
+                new THREE.Vector3(0.45, -1.45, 0.12),
+                new THREE.Vector3(0.88, -1.65, 0.12),
+                new THREE.Vector3(1.15, -0.85, 0.15)
+            ]);
+            const rbbCurve = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0.02, -0.18, 0.15),
+                new THREE.Vector3(-0.12, -0.72, 0.22),
+                new THREE.Vector3(-0.35, -1.42, 0.28),
+                new THREE.Vector3(-0.85, -1.35, 0.32),
+                new THREE.Vector3(-1.05, -0.65, 0.28)
+            ]);
+
+            [hisCurve, lbbCurve, rbbCurve].forEach(c => {
+                const m = new THREE.Mesh(new THREE.TubeGeometry(c, 32, 0.034, 10, false), pathwayMat.clone());
+                registerAnatomicalMesh(m, "HIS", false);
+                heartRootGroup.add(m);
+                conductionTubes.push({ mesh: m, curve: c, group: "ventricular" });
+            });
+
+            // Glowing traveling Action Potential spheres
+            const pulseMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for (let i = 0; i < 5; i++) {
+                const s = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 12), pulseMat.clone());
+                heartRootGroup.add(s);
+                apPulseSpheres.push(s);
+            }
+        }
+
+        // --- INSTANCED HEMODYNAMIC PARTICLE FLOW ---
+        function buildHemodynamicParticleSystems() {
+            // 1. DEOXYGENATED PATHWAY (Dark Blue: SVC/IVC -> RA -> TV -> RV -> PV -> PA)
+            const deoxyPath1 = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-1.15, 2.55, -0.05), // SVC
+                new THREE.Vector3(-1.02, 0.78, 0.08),  // RA
+                new THREE.Vector3(-0.68, 0.16, 0.22),  // Tricuspid Valve
+                new THREE.Vector3(-0.72, -1.05, 0.32), // RV Apex
+                new THREE.Vector3(-0.32, -0.15, 0.45), // RV Outflow (Infundibulum)
+                new THREE.Vector3(-0.28, 0.56, 0.48),  // Pulmonary Valve
+                new THREE.Vector3(-0.22, 1.7, 0.12),   // Pulmonary Trunk
+                new THREE.Vector3(-1.65, 1.65, -0.35)  // Right PA
+            ]);
+            const deoxyPath2 = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(-1.12, -2.15, -0.22), // IVC
+                new THREE.Vector3(-0.98, 0.65, 0.05),   // RA
+                new THREE.Vector3(-0.68, 0.16, 0.22),   // Tricuspid Valve
+                new THREE.Vector3(-0.68, -1.12, 0.28),  // RV Apex
+                new THREE.Vector3(-0.28, 0.56, 0.48),   // Pulmonary Valve
+                new THREE.Vector3(-0.22, 1.7, 0.12),    // Pulmonary Trunk
+                new THREE.Vector3(1.45, 1.72, -0.35)    // Left PA
+            ]);
+
+            // 2. OXYGENATED PATHWAY (Bright Arterial Red: Pulmonary Veins -> LA -> MV -> LV -> AV -> Aorta)
+            const oxyPath1 = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(1.95, 1.18, -0.45),  // Pulmonary Vein
+                new THREE.Vector3(0.88, 0.85, -0.25),  // LA
+                new THREE.Vector3(0.68, 0.22, -0.05),  // Mitral Valve
+                new THREE.Vector3(0.75, -1.35, 0.05),  // LV Apex
+                new THREE.Vector3(0.35, -0.25, 0.05),  // LVOT
+                new THREE.Vector3(0.22, 0.42, 0.02),   // Aortic Valve
+                new THREE.Vector3(0.32, 1.55, 0.05),   // Ascending Aorta
+                new THREE.Vector3(-0.42, 2.35, -0.42), // Aortic Arch
+                new THREE.Vector3(-0.68, -0.6, -1.02)  // Descending Aorta
+            ]);
+
+            const particleGeo = new THREE.SphereGeometry(0.048, 10, 10);
+            particleGeo.scale(1.15, 0.65, 1.15); // Biconcave RBC disc profile
+
+            const deoxyMat = new THREE.MeshStandardMaterial({
+                color: 0x3b82f6,
+                emissive: 0x1d4ed8,
+                emissiveIntensity: 0.65,
+                roughness: 0.25
+            });
+            const oxyMat = new THREE.MeshStandardMaterial({
+                color: 0xef4444,
+                emissive: 0xdc2626,
+                emissiveIntensity: 0.75,
+                roughness: 0.25
+            });
+
+            const countPerSystem = 110;
+            deoxyParticleMesh = new THREE.InstancedMesh(particleGeo, deoxyMat, countPerSystem);
+            oxyParticleMesh = new THREE.InstancedMesh(particleGeo, oxyMat, countPerSystem);
+
+            for (let i = 0; i < countPerSystem; i++) {
+                deoxyParticleData.push({
+                    t: i / countPerSystem,
+                    curve: i % 2 === 0 ? deoxyPath1 : deoxyPath2,
+                    jitter: new THREE.Vector3((Math.random() - 0.5) * 0.14, (Math.random() - 0.5) * 0.14, (Math.random() - 0.5) * 0.14)
+                });
+                oxyParticleData.push({
+                    t: i / countPerSystem,
+                    curve: oxyPath1,
+                    jitter: new THREE.Vector3((Math.random() - 0.5) * 0.14, (Math.random() - 0.5) * 0.14, (Math.random() - 0.5) * 0.14)
+                });
+            }
+
+            heartRootGroup.add(deoxyParticleMesh);
+            heartRootGroup.add(oxyParticleMesh);
+        }
+    </script>
+
+    <script>
+        const dummyObj = new THREE.Object3D();
+
+        function updateHeartSimulation(dt) {
+            const cycleDuration = 60.0 / simState.bpm; // e.g., 0.80s at 75 BPM
+            if (simState.isPlaying) {
+                simState.cyclePhase = (simState.cyclePhase + (dt * simState.speed) / cycleDuration) % 1.0;
+                document.getElementById('wiggers-scrubber').value = simState.cyclePhase.toFixed(3);
+            }
+
+            const p = simState.cyclePhase; // 0.0 -> 1.0
+
+            // 1. CHAMBER CONTRACTION & RELAXATION KINEMATICS
+            // Atrial contraction peaks during 0.00 - 0.11 (Atrial Systole)
+            let atrialScale = 1.0;
+            if (p < 0.11) {
+                atrialScale = 1.0 - 0.16 * Math.sin((p / 0.11) * Math.PI);
+            } else {
+                atrialScale = 0.94 + 0.08 * Math.sin(((p - 0.11) / 0.89) * Math.PI);
+            }
+            laChamberGroup.scale.set(atrialScale, atrialScale, atrialScale);
+            raChamberGroup.scale.set(atrialScale, atrialScale, atrialScale);
+
+            // Ventricular contraction peaks during 0.18 - 0.42 (Rapid & Reduced Ejection)
+            let ventScale = 1.0;
+            if (p >= 0.11 && p < 0.18) {
+                // Isovolumetric tension (slight spherical rounding)
+                ventScale = 1.03;
+            } else if (p >= 0.18 && p < 0.44) {
+                const ejProgress = (p - 0.18) / 0.26;
+                ventScale = 1.03 - 0.21 * Math.sin(ejProgress * (Math.PI / 2));
+            } else if (p >= 0.44 && p < 0.50) {
+                ventScale = 0.82; // End-systolic volume
+            } else {
+                // Diastolic filling recovery
+                const fillProgress = p >= 0.50 ? (p - 0.50) / 0.61 : (p + 0.50) / 0.61;
+                ventScale = 0.82 + 0.21 * Math.min(1.0, fillProgress);
+            }
+
+            lvChamberGroup.scale.set(ventScale, 0.95 + (ventScale - 0.9) * 0.4, ventScale);
+            rvChamberGroup.scale.set(ventScale, 0.95 + (ventScale - 0.9) * 0.4, ventScale);
+            outerMyocardiumGroup.scale.set(0.95 + (ventScale - 0.9) * 0.5, 0.96 + (ventScale - 0.9) * 0.35, 0.95 + (ventScale - 0.9) * 0.5);
+
+            // 2. VALVE LEAFLET KINEMATICS
+            // AV Valves (Mitral & Tricuspid): CLOSED during Ventricular Systole (0.11 to 0.50), OPEN during Diastole
+            const avOpenAmount = (p >= 0.11 && p < 0.50) ? 0.0 : (p < 0.11 ? 0.85 : 0.72);
+            mitralLeaflets.forEach(item => {
+                item.pivot.rotation.z = THREE.MathUtils.lerp(item.pivot.rotation.z, -avOpenAmount, 0.25);
+            });
+            tricuspidLeaflets.forEach(item => {
+                item.pivot.rotation.x = THREE.MathUtils.lerp(item.pivot.rotation.x, avOpenAmount, 0.25);
+            });
+
+            // Semilunar Valves (Aortic & Pulmonary): OPEN during Ventricular Ejection (0.18 to 0.42), CLOSED otherwise
+            const slOpenAmount = (p >= 0.18 && p < 0.42) ? 0.92 : 0.0;
+            aorticLeaflets.forEach(item => {
+                item.pivot.rotation.x = THREE.MathUtils.lerp(item.pivot.rotation.x, -slOpenAmount, 0.28);
+            });
+            pulmonaryLeaflets.forEach(item => {
+                item.pivot.rotation.x = THREE.MathUtils.lerp(item.pivot.rotation.x, -slOpenAmount, 0.28);
+            });
+
+            // 3. ELECTROPHYSIOLOGICAL CONDUCTION WAVEFRONT
+            // SA Node fires at p = 0.00 - 0.06
+            // Atrial tracts conduct at p = 0.02 - 0.09
+            // AV Node delays at p = 0.05 - 0.12
+            // His-Purkinje fires rapidly at p = 0.11 - 0.19
+            conductionNodes.forEach(node => {
+                if (node.type === "SAN") {
+                    const active = p < 0.08;
+                    node.mesh.material.emissiveIntensity = active ? 2.4 : 0.6;
+                    node.mesh.scale.setScalar(active ? 1.35 : 1.0);
+                } else if (node.type === "AVN") {
+                    const active = p >= 0.05 && p < 0.13;
+                    node.mesh.material.emissiveIntensity = active ? 2.4 : 0.6;
+                    node.mesh.scale.setScalar(active ? 1.35 : 1.0);
+                }
+            });
+
+            conductionTubes.forEach((tube, idx) => {
+                let active = false;
+                let pulseT = -1;
+                if (tube.group === "atrial" && p >= 0.01 && p <= 0.09) {
+                    active = true;
+                    pulseT = (p - 0.01) / 0.08;
+                } else if (tube.group === "ventricular" && p >= 0.11 && p <= 0.19) {
+                    active = true;
+                    pulseT = (p - 0.11) / 0.08;
+                }
+                tube.mesh.material.emissiveIntensity = active ? 2.0 : 0.55;
+
+                if (apPulseSpheres[idx]) {
+                    if (active && simState.layers.conduction && pulseT >= 0 && pulseT <= 1) {
+                        apPulseSpheres[idx].visible = true;
+                        const pt = tube.curve.getPointAt(Math.min(1, Math.max(0, pulseT)));
+                        apPulseSpheres[idx].position.copy(pt);
+                    } else {
+                        apPulseSpheres[idx].visible = false;
+                    }
+                }
+            });
+
+            // 4. PULSATILE HEMODYNAMIC BLOOD PARTICLES
+            // Blood accelerates during Systolic Ejection (0.18-0.42) and Rapid Diastolic Filling (0.50-0.72)
+            let flowVelocity = 0.22;
+            if (p >= 0.18 && p < 0.42) flowVelocity = 0.85;
+            else if (p >= 0.50 && p < 0.72) flowVelocity = 0.52;
+            else if (p < 0.11) flowVelocity = 0.48;
+
+            const step = (simState.isPlaying ? dt * simState.speed : 0) * flowVelocity;
+
+            for (let i = 0; i < deoxyParticleData.length; i++) {
+                const d = deoxyParticleData[i];
+                d.t = (d.t + step) % 1.0;
+                const pos = d.curve.getPointAt(d.t).add(d.jitter);
+                const tangent = d.curve.getTangentAt(d.t);
+                dummyObj.position.copy(pos);
+                dummyObj.lookAt(pos.clone().add(tangent));
+                dummyObj.updateMatrix();
+                deoxyParticleMesh.setMatrixAt(i, dummyObj.matrix);
+
+                const o = oxyParticleData[i];
+                o.t = (o.t + step) % 1.0;
+                const posO = o.curve.getPointAt(o.t).add(o.jitter);
+                const tanO = o.curve.getTangentAt(o.t);
+                dummyObj.position.copy(posO);
+                dummyObj.lookAt(posO.clone().add(tanO));
+                dummyObj.updateMatrix();
+                oxyParticleMesh.setMatrixAt(i, dummyObj.matrix);
+            }
+            deoxyParticleMesh.instanceMatrix.needsUpdate = true;
+            oxyParticleMesh.instanceMatrix.needsUpdate = true;
+
+            // Update Live Telemetry Readouts
+            updateLivePhysiologyReadouts(p, cycleDuration);
+        }
+
+        // --- RAYCASTING, HOVER & CLICK SELECTION ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let pointerDownPos = { x: 0, y: 0 };
+
+        function initRaycasting() {
+            const dom = renderer.domElement;
+
+            dom.addEventListener('pointerdown', (e) => {
+                pointerDownPos = { x: e.clientX, y: e.clientY };
+            });
+
+            dom.addEventListener('pointermove', (e) => {
+                const rect = dom.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+                raycaster.setFromCamera(mouse, camera);
+                const visibleMeshes = selectableMeshes.filter(m => m.visible);
+                const intersects = raycaster.intersectObjects(visibleMeshes, false);
+
+                // Filter out meshes clipped by the active coronal plane
+                let validHit = null;
+                for (let hit of intersects) {
+                    if (simState.cutawayEnabled && hit.object.userData.clippable) {
+                        if (hit.point.z > simState.cutawayDepth) continue;
+                    }
+                    validHit = hit;
+                    break;
+                }
+
+                const tooltip = document.getElementById('hover-tooltip');
+                if (validHit && validHit.object.userData.anatomyId) {
+                    const id = validHit.object.userData.anatomyId;
+                    setHoveredEntity(id);
+                    dom.style.cursor = 'pointer';
+
+                    const entry = ANATOMICAL_DB[id];
+                    if (entry) {
+                        tooltip.classList.remove('hidden');
+                        tooltip.style.left = (e.clientX + 14) + 'px';
+                        tooltip.style.top = (e.clientY + 14) + 'px';
+                        document.getElementById('tooltip-title').textContent = entry.name;
+                        document.getElementById('tooltip-sub').textContent = `${entry.latin} • Click to focus`;
+                    }
+                } else {
+                    setHoveredEntity(null);
+                    dom.style.cursor = 'grab';
+                    tooltip.classList.add('hidden');
+                }
+            });
+
+            dom.addEventListener('pointerup', (e) => {
+                const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
+                if (dist < 6 && simState.hoveredId) {
+                    selectAnatomicalStructure(simState.hoveredId, true);
+                }
+            });
+        }
+
+        function setHoveredEntity(id) {
+            if (simState.hoveredId === id) return;
+            simState.hoveredId = id;
+            refreshMeshHighlighting();
+        }
+
+        function selectAnatomicalStructure(id, animateCamera = true) {
+            if (!ANATOMICAL_DB[id]) return;
+            simState.selectedId = id;
+            const entry = ANATOMICAL_DB[id];
+
+            // Populate Right Medical Telemetry HUD
+            document.getElementById('telemetry-category').textContent = entry.category;
+            document.getElementById('telemetry-o2-badge').textContent = entry.o2Badge;
+            document.getElementById('telemetry-title').textContent = entry.name;
+            document.getElementById('telemetry-latin').textContent = entry.latin;
+            document.getElementById('telemetry-supply').textContent = entry.supply;
+            document.getElementById('telemetry-pressure').textContent = entry.pressure;
+            document.getElementById('metric-1-sub').textContent = entry.pressureSub;
+            document.getElementById('telemetry-volume').textContent = entry.volume;
+            document.getElementById('metric-2-sub').textContent = entry.volumeSub;
+            document.getElementById('telemetry-o2').textContent = entry.o2;
+            document.getElementById('metric-3-sub').textContent = entry.o2Sub;
+            document.getElementById('telemetry-description').textContent = entry.description;
+            document.getElementById('telemetry-auscultation').textContent = entry.auscultation;
+
+            const pearlsList = document.getElementById('telemetry-pearls');
+            pearlsList.innerHTML = entry.pearls.map(p => `
+                <li class="flex items-start gap-2">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400 mt-1.5 shrink-0"></span>
+                    <span>${p}</span>
+                </li>
+            `).join('');
+
+            // Highlight active item in Anatomical Index & 3D Pins
+            ANATOMICAL_ORDER.forEach(key => {
+                const idxBtn = document.getElementById(`index-btn-${key}`);
+                if (idxBtn) {
+                    if (key === id) {
+                        idxBtn.classList.add('border-sky-400', 'bg-sky-500/20');
+                    } else {
+                        idxBtn.classList.remove('border-sky-400', 'bg-sky-500/20');
+                    }
+                }
+                if (pinElements[key]) {
+                    pinElements[key].classList.toggle('active-pin', key === id);
+                }
+            });
+
+            // Smooth Camera Focus Transition
+            if (animateCamera) {
+                controlsTargetLook.set(entry.focusPos.x, entry.focusPos.y, entry.focusPos.z);
+                cameraTargetPos.set(
+                    entry.focusPos.x + entry.camOffset.x,
+                    entry.focusPos.y + entry.camOffset.y,
+                    entry.focusPos.z + entry.camOffset.z
+                );
+                isCameraTweening = true;
+            }
+
+            refreshMeshHighlighting();
+        }
+
+        function refreshMeshHighlighting() {
+            selectableMeshes.forEach(mesh => {
+                const id = mesh.userData.anatomyId;
+                const isSelected = (id === simState.selectedId);
+                const isHovered = (id === simState.hoveredId);
+
+                if (isSelected) {
+                    mesh.material.emissive = new THREE.Color(0x0284c7);
+                    mesh.material.emissiveIntensity = 0.55;
+                    mesh.material.opacity = 1.0;
+                    mesh.material.transparent = false;
+                } else if (isHovered) {
+                    mesh.material.emissive = new THREE.Color(0x38bdf8);
+                    mesh.material.emissiveIntensity = 0.45;
+                    mesh.material.opacity = mesh.userData.baseOpacity;
+                } else {
+                    mesh.material.emissive.copy(mesh.userData.baseEmissive);
+                    mesh.material.emissiveIntensity = 0.35;
+                    if (simState.autoDim && simState.selectedId) {
+                        mesh.material.transparent = true;
+                        mesh.material.opacity = Math.min(mesh.userData.baseOpacity, 0.32);
+                    } else {
+                        mesh.material.transparent = mesh.userData.baseTransparent;
+                        mesh.material.opacity = mesh.userData.baseOpacity;
+                    }
+                }
+            });
+        }
+    </script>
+
+    <script>
+        function initFloatingPins() {
+            const container = document.getElementById('pins-container');
+            const indexContainer = document.getElementById('left-tab-index');
+            container.innerHTML = '';
+            indexContainer.innerHTML = '';
+
+            ANATOMICAL_ORDER.forEach(id => {
+                const item = ANATOMICAL_DB[id];
+                const dotColor = item.colorBadge === 'rose' ? 'bg-rose-500' : (item.colorBadge === 'sky' ? 'bg-sky-400' : 'bg-amber-400');
+
+                // Create 3D Floating Pin
+                const pin = document.createElement('div');
+                pin.className = 'anat-pin';
+                pin.innerHTML = `<span class="anat-pin-dot ${dotColor}"></span><span>${id}</span>`;
+                pin.title = item.name;
+                pin.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectAnatomicalStructure(id, true);
+                });
+                container.appendChild(pin);
+                pinElements[id] = pin;
+
+                // Create Left Drawer Anatomical Index Row
+                const btn = document.createElement('button');
+                btn.id = `index-btn-${id}`;
+                btn.className = 'w-full text-left p-2 rounded-lg bg-slate-900/60 hover:bg-slate-800 border border-slate-800 transition flex items-center justify-between gap-2';
+                btn.onclick = () => selectAnatomicalStructure(id, true);
+                btn.innerHTML = `
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="w-2 h-2 rounded-full ${dotColor} shrink-0"></span>
+                        <div class="truncate">
+                            <div class="text-xs font-semibold text-slate-200 truncate">${item.name}</div>
+                            <div class="text-[10px] italic text-slate-400 truncate">${item.latin}</div>
+                        </div>
+                    </div>
+                    <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-950 text-sky-400 border border-slate-800 shrink-0">${id}</span>
+                `;
+                indexContainer.appendChild(btn);
+            });
+        }
+
+        function updateFloatingPinPositions() {
+            if (!simState.layers.pins) return;
+            const widthHalf = window.innerWidth / 2;
+            const heightHalf = window.innerHeight / 2;
+
+            ANATOMICAL_ORDER.forEach(id => {
+                const entry = ANATOMICAL_DB[id];
+                const pin = pinElements[id];
+                if (!pin) return;
+
+                const worldPos = new THREE.Vector3(entry.focusPos.x, entry.focusPos.y, entry.focusPos.z);
+                worldPos.project(camera);
+
+                if (worldPos.z > 1.0) {
+                    pin.style.display = 'none';
+                    return;
+                }
+
+                const x = (worldPos.x * widthHalf) + widthHalf;
+                const y = -(worldPos.y * heightHalf) + heightHalf;
+
+                pin.style.display = 'flex';
+                pin.style.left = `${x}px`;
+                pin.style.top = `${y}px`;
+            });
+        }
+
+        // --- MATHEMATICAL WAVEFORM SYNTHESIS FOR WIGGERS DIAGRAM ---
+        function getWiggersValuesAtPhase(p) {
+            // 1. Left Ventricular Pressure (mmHg: 6 to 120)
+            let lvp = 7;
+            if (p < 0.11) {
+                // Atrial systole kick ('a' wave)
+                lvp = 7 + 4 * Math.sin((p / 0.11) * Math.PI);
+            } else if (p < 0.18) {
+                // Isovolumetric Contraction (8 -> 80 mmHg)
+                const t = (p - 0.11) / 0.07;
+                lvp = 8 + 72 * Math.pow(t, 1.4);
+            } else if (p < 0.42) {
+                // Ventricular Ejection (arch 80 -> 120 -> 92 mmHg)
+                const t = (p - 0.18) / 0.24;
+                lvp = 80 + 40 * Math.sin(t * Math.PI) + 12 * (1 - t);
+            } else if (p < 0.50) {
+                // Isovolumetric Relaxation (92 -> 6 mmHg)
+                const t = (p - 0.42) / 0.08;
+                lvp = 92 * (1 - Math.pow(t, 0.85)) + 6;
+            } else {
+                // Diastole (Rapid filling & diastasis: 5 -> 7 mmHg)
+                const t = (p - 0.50) / 0.50;
+                lvp = 5 + 2.5 * t;
+            }
+
+            // 2. Aortic Pressure (mmHg: 80 to 120 with Dicrotic Notch at p=0.42)
+            let aop = 80;
+            if (p < 0.18) {
+                aop = 84 - 4 * (p / 0.18);
+            } else if (p < 0.42) {
+                aop = lvp - 1.5;
+            } else if (p < 0.46) {
+                // Incisura / Dicrotic Notch
+                const t = (p - 0.42) / 0.04;
+                aop = 94 + 5 * Math.sin(t * Math.PI);
+            } else {
+                const t = (p - 0.46) / 0.54;
+                aop = 96 - 12 * t;
+            }
+
+            // 3. Left Atrial Pressure (mmHg: a, c, v waves)
+            let lap = 8;
+            if (p < 0.11) {
+                lap = 8 + 4 * Math.sin((p / 0.11) * Math.PI); // 'a' wave
+            } else if (p < 0.17) {
+                lap = 8 + 2.5 * Math.sin(((p - 0.11) / 0.06) * Math.PI); // 'c' wave
+            } else if (p < 0.50) {
+                const t = (p - 0.17) / 0.33;
+                lap = 6 + 6.5 * Math.sin(t * (Math.PI / 2)); // 'v' wave buildup
+            } else {
+                const t = (p - 0.50) / 0.50;
+                lap = 12.5 * Math.exp(-t * 4) + 7.5 * (1 - Math.exp(-t * 4)); // 'y' descent
+            }
+
+            // 4. Left Ventricular Volume (mL: 45 to 120)
+            let lvv = 120;
+            if (p < 0.11) {
+                const t = p / 0.11;
+                lvv = 104 + 16 * Math.sin(t * (Math.PI / 2)); // Atrial kick adds last 16 mL
+            } else if (p < 0.18) {
+                lvv = 120; // Isovolumetric contraction
+            } else if (p < 0.42) {
+                const t = (p - 0.18) / 0.24;
+                lvv = 120 - 75 * Math.pow(t, 0.78); // Rapid then reduced ejection down to 45 mL
+            } else if (p < 0.50) {
+                lvv = 45; // Isovolumetric relaxation
+            } else if (p < 0.72) {
+                const t = (p - 0.50) / 0.22;
+                lvv = 45 + 48 * Math.sin(t * (Math.PI / 2)); // Rapid filling
+            } else {
+                const t = (p - 0.72) / 0.28;
+                lvv = 93 + 11 * t; // Diastasis
+            }
+
+            // 5. ECG Lead II (mV normalized)
+            let ecg = 0;
+            // P-wave (center 0.04)
+            ecg += 0.28 * Math.exp(-Math.pow((p - 0.04) / 0.022, 2));
+            // Q-wave (center 0.105)
+            ecg -= 0.22 * Math.exp(-Math.pow((p - 0.105) / 0.008, 2));
+            // R-wave spike (center 0.12)
+            ecg += 1.15 * Math.exp(-Math.pow((p - 0.12) / 0.011, 2));
+            // S-wave (center 0.135)
+            ecg -= 0.32 * Math.exp(-Math.pow((p - 0.135) / 0.009, 2));
+            // T-wave (center 0.36)
+            ecg += 0.38 * Math.exp(-Math.pow((p - 0.36) / 0.042, 2));
+
+            // 6. Phonocardiogram (S1 at 0.12-0.16, S2 at 0.42-0.46)
+            let phono = 0;
+            if (p >= 0.11 && p <= 0.17) {
+                phono = Math.sin((p - 0.11) * 280) * Math.exp(-Math.pow((p - 0.135) / 0.018, 2));
+            } else if (p >= 0.41 && p <= 0.47) {
+                phono = 0.85 * Math.sin((p - 0.41) * 320) * Math.exp(-Math.pow((p - 0.435) / 0.015, 2));
+            }
+
+            return { lvp, aop, lap, lvv, ecg, phono };
+        }
+
+        function updateLivePhysiologyReadouts(p, cycleDuration) {
+            const vals = getWiggersValuesAtPhase(p);
+
+            // Phase Name & Color
+            let phaseName = "Atrial Systole";
+            let dotClass = "bg-amber-400";
+            let sysDiaTag = "Late Diastole";
+
+            if (p < 0.11) {
+                phaseName = "1. Atrial Systole (A-Kick)";
+                dotClass = "bg-amber-400";
+                sysDiaTag = "Late Diastole";
+            } else if (p < 0.18) {
+                phaseName = "2. Isovolumetric Contraction";
+                dotClass = "bg-rose-500";
+                sysDiaTag = "Early Systole (S1)";
+            } else if (p < 0.30) {
+                phaseName = "3. Rapid Ventricular Ejection";
+                dotClass = "bg-red-500";
+                sysDiaTag = "Mid Systole";
+            } else if (p < 0.42) {
+                phaseName = "4. Reduced Ventricular Ejection";
+                dotClass = "bg-orange-400";
+                sysDiaTag = "Late Systole";
+            } else if (p < 0.50) {
+                phaseName = "5. Isovolumetric Relaxation";
+                dotClass = "bg-sky-400";
+                sysDiaTag = "Early Diastole (S2)";
+            } else if (p < 0.72) {
+                phaseName = "6. Rapid Ventricular Filling";
+                dotClass = "bg-emerald-400";
+                sysDiaTag = "Mid Diastole";
+            } else {
+                phaseName = "7. Diastasis (Passive Filling)";
+                dotClass = "bg-teal-400";
+                sysDiaTag = "Late Diastole";
+            }
+
+            document.getElementById('live-phase-name').textContent = phaseName;
+            document.getElementById('live-phase-dot').className = `w-2 h-2 rounded-full ${dotClass}`;
+            document.getElementById('live-cycle-time').textContent = `${(p * cycleDuration).toFixed(2)}s / ${cycleDuration.toFixed(2)}s`;
+
+            // Top Vitals
+            document.getElementById('hud-lv-p').textContent = Math.round(vals.lvp);
+            document.getElementById('hud-ao-p').textContent = Math.round(vals.aop);
+            document.getElementById('hud-lv-v').textContent = Math.round(vals.lvv);
+
+            const avState = (p >= 0.11 && p < 0.50) ? "CLOSED" : "OPEN";
+            const slState = (p >= 0.18 && p < 0.42) ? "OPEN" : "CLOSED";
+            document.getElementById('hud-valves-state').textContent = `AV: ${avState} | SL: ${slState}`;
+
+            // Update Right Drawer Real-Time Activity Box for selected structure
+            const entry = ANATOMICAL_DB[simState.selectedId];
+            if (entry) {
+                document.getElementById('telemetry-live-phase-tag').textContent = sysDiaTag;
+                document.getElementById('telemetry-live-status').textContent = entry.phaseStatus(p);
+            }
+        }
+
+        // --- RENDER INTERACTIVE WIGGERS DIAGRAM ON CANVAS ---
+        function drawWiggersDiagram() {
+            const canvas = document.getElementById('wiggers-canvas');
+            if (!canvas) return;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            if (canvas.width !== Math.floor(rect.width * dpr) || canvas.height !== Math.floor(rect.height * dpr)) {
+                canvas.width = Math.floor(rect.width * dpr);
+                canvas.height = Math.floor(rect.height * dpr);
+            }
+
+            const ctx = canvas.getContext('2d');
+            ctx.save();
+            ctx.scale(dpr, dpr);
+            const W = rect.width;
+            const H = rect.height;
+
+            ctx.clearRect(0, 0, W, H);
+
+            // Phase Vertical Dividers
+            const phaseBounds = [
+                { p: 0.00, label: "Atrial Sys" },
+                { p: 0.11, label: "Iso Contr" },
+                { p: 0.18, label: "Ejection" },
+                { p: 0.42, label: "Iso Relax" },
+                { p: 0.50, label: "Rapid Fill" },
+                { p: 0.72, label: "Diastasis" }
+            ];
+
+            ctx.font = "500 9px 'JetBrains Mono', monospace";
+            phaseBounds.forEach(b => {
+                const x = b.p * W;
+                ctx.strokeStyle = "rgba(51, 65, 85, 0.5)";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, H);
+                ctx.stroke();
+
+                ctx.fillStyle = "rgba(148, 163, 184, 0.75)";
+                ctx.fillText(b.label, x + 4, 11);
+            });
+
+            const steps = 220;
+
+            // Helper to plot a curve
+            function plotCurve(color, lineWidth, yMapper, dashed = false) {
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lineWidth;
+                if (dashed) ctx.setLineDash([4, 3]);
+                else ctx.setLineDash([]);
+
+                for (let i = 0; i <= steps; i++) {
+                    const ph = i / steps;
+                    const x = ph * W;
+                    const v = getWiggersValuesAtPhase(ph);
+                    const y = yMapper(v);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // 1. Aortic Pressure (Amber dashed)
+            plotCurve("#fbbf24", 1.6, v => H * 0.62 - (v.aop / 130) * (H * 0.46), true);
+
+            // 2. Left Atrial Pressure (Sky Blue)
+            plotCurve("#38bdf8", 1.5, v => H * 0.62 - (v.lap / 130) * (H * 0.46));
+
+            // 3. Left Ventricular Pressure (Rose Red)
+            plotCurve("#fb7185", 2.2, v => H * 0.62 - (v.lvp / 130) * (H * 0.46));
+
+            // 4. Left Ventricular Volume (Purple)
+            plotCurve("#c084fc", 1.6, v => H * 0.78 - ((v.lvv - 40) / 90) * (H * 0.22));
+
+            // 5. Lead II ECG (Emerald Green)
+            plotCurve("#34d399", 1.9, v => H * 0.88 - v.ecg * (H * 0.14));
+
+            // 6. Phonocardiogram (S1 & S2 Traces)
+            plotCurve("#cbd5e1", 1.2, v => H * 0.94 - v.phono * (H * 0.06));
+
+            // ECG Wave & Heart Sound Annotations
+            ctx.fillStyle = "#34d399";
+            ctx.fillText("P", 0.038 * W, H * 0.79);
+            ctx.fillText("QRS", 0.125 * W, H * 0.72);
+            ctx.fillText("T", 0.358 * W, H * 0.78);
+
+            ctx.fillStyle = "#f8fafc";
+            ctx.fillText("S1", 0.135 * W, H * 0.97);
+            ctx.fillText("S2", 0.435 * W, H * 0.97);
+
+            // Active Synchronized Vertical Cursor
+            const cursorX = simState.cyclePhase * W;
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(cursorX, 0);
+            ctx.lineTo(cursorX, H);
+            ctx.stroke();
+
+            // Glowing dots on cursor intersections
+            const curVals = getWiggersValuesAtPhase(simState.cyclePhase);
+            const dots = [
+                { y: H * 0.62 - (curVals.lvp / 130) * (H * 0.46), c: "#fb7185" },
+                { y: H * 0.62 - (curVals.aop / 130) * (H * 0.46), c: "#fbbf24" },
+                { y: H * 0.88 - curVals.ecg * (H * 0.14), c: "#34d399" }
+            ];
+            dots.forEach(d => {
+                ctx.fillStyle = d.c;
+                ctx.beginPath();
+                ctx.arc(cursorX, d.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.restore();
+        }
+    </script>
+
+    <script>
+        function switchLeftTab(tab) {
+            const btnLayers = document.getElementById('tab-btn-layers');
+            const btnIndex = document.getElementById('tab-btn-index');
+            const tabLayers = document.getElementById('left-tab-layers');
+            const tabIndex = document.getElementById('left-tab-index');
+
+            if (tab === 'layers') {
+                tabLayers.classList.remove('hidden');
+                tabIndex.classList.add('hidden');
+                btnLayers.className = "py-1.5 text-xs font-semibold rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 transition";
+                btnIndex.className = "py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition";
+            } else {
+                tabLayers.classList.add('hidden');
+                tabIndex.classList.remove('hidden');
+                btnIndex.className = "py-1.5 text-xs font-semibold rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 transition";
+                btnLayers.className = "py-1.5 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 transition";
+            }
+        }
+
+        function togglePlayPause() {
+            simState.isPlaying = !simState.isPlaying;
+            document.getElementById('play-pause-text').textContent = simState.isPlaying ? 'Pause' : 'Play';
+            document.getElementById('icon-pause').classList.toggle('hidden', !simState.isPlaying);
+            document.getElementById('icon-play').classList.toggle('hidden', simState.isPlaying);
+        }
+
+        function setPlaybackSpeed(spd) {
+            simState.speed = spd;
+            const ids = { 0.25: 'speed-025', 0.5: 'speed-05', 1.0: 'speed-1' };
+            Object.entries(ids).forEach(([val, elId]) => {
+                const btn = document.getElementById(elId);
+                if (parseFloat(val) === spd) {
+                    btn.className = "px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 font-semibold transition";
+                } else {
+                    btn.className = "px-2 py-0.5 rounded text-slate-400 hover:text-white transition";
+                }
+            });
+        }
+
+        function setHeartRate(bpm) {
+            simState.bpm = bpm;
+            document.getElementById('slider-bpm').value = bpm;
+            document.getElementById('bpm-slider-label').textContent = `${bpm} BPM`;
+            document.getElementById('hud-bpm').textContent = bpm;
+        }
+
+        function setCutawayPreset(depth, enabled) {
+            simState.cutawayEnabled = enabled;
+            simState.cutawayDepth = depth;
+            document.getElementById('toggle-cutaway').checked = enabled;
+            document.getElementById('slider-cutaway').value = depth;
+            document.getElementById('cutaway-depth-label').textContent = enabled ? `Plane: ${depth >= 0 ? '+' : ''}${depth.toFixed(2)}` : 'OFF';
+            applyCutawayPlaneSettings();
+        }
+
+        function applyCutawayPlaneSettings() {
+            clippingPlane.constant = simState.cutawayDepth;
+            const planes = simState.cutawayEnabled ? [clippingPlane] : [];
+            outerMyocardiumGroup.children.forEach(m => {
+                m.material.clippingPlanes = planes;
+            });
+            selectableMeshes.forEach(m => {
+                if (m.userData.clippable) {
+                    m.material.clippingPlanes = planes;
+                }
+            });
+        }
+
+        function resetSelectionAndCamera() {
+            controlsTargetLook.set(0, 0.1, 0);
+            cameraTargetPos.set(0, 0.8, 10.5);
+            isCameraTweening = true;
+            refreshMeshHighlighting();
+        }
+
+        function bindUIEvents() {
+            // Coronal Cutaway Checkbox & Slider
+            document.getElementById('toggle-cutaway').addEventListener('change', (e) => {
+                simState.cutawayEnabled = e.target.checked;
+                document.getElementById('cutaway-depth-label').textContent = simState.cutawayEnabled
+                    ? `Plane: ${simState.cutawayDepth >= 0 ? '+' : ''}${simState.cutawayDepth.toFixed(2)}`
+                    : 'OFF';
+                applyCutawayPlaneSettings();
+            });
+
+            document.getElementById('slider-cutaway').addEventListener('input', (e) => {
+                simState.cutawayDepth = parseFloat(e.target.value);
+                if (!simState.cutawayEnabled) {
+                    simState.cutawayEnabled = true;
+                    document.getElementById('toggle-cutaway').checked = true;
+                }
+                document.getElementById('cutaway-depth-label').textContent = `Plane: ${simState.cutawayDepth >= 0 ? '+' : ''}${simState.cutawayDepth.toFixed(2)}`;
+                applyCutawayPlaneSettings();
+            });
+
+            // Layer Visibility Checkboxes
+            document.getElementById('toggle-myocardium').addEventListener('change', (e) => {
+                simState.layers.myocardium = e.target.checked;
+                outerMyocardiumGroup.visible = e.target.checked;
+            });
+
+            document.getElementById('toggle-conduction').addEventListener('change', (e) => {
+                simState.layers.conduction = e.target.checked;
+                const vis = e.target.checked;
+                conductionNodes.forEach(n => n.mesh.visible = vis);
+                conductionTubes.forEach(t => t.mesh.visible = vis);
+                if (!vis) apPulseSpheres.forEach(s => s.visible = false);
+            });
+
+            document.getElementById('toggle-particles').addEventListener('change', (e) => {
+                simState.layers.particles = e.target.checked;
+                deoxyParticleMesh.visible = e.target.checked;
+                oxyParticleMesh.visible = e.target.checked;
+            });
+
+            document.getElementById('toggle-coronary').addEventListener('change', (e) => {
+                simState.layers.coronary = e.target.checked;
+                if (entityMeshMap["COR"]) {
+                    entityMeshMap["COR"].forEach(m => m.visible = e.target.checked);
+                }
+            });
+
+            document.getElementById('toggle-pins').addEventListener('change', (e) => {
+                simState.layers.pins = e.target.checked;
+                document.getElementById('pins-container').classList.toggle('hidden', !e.target.checked);
+            });
+
+            // Heart Rate Slider
+            document.getElementById('slider-bpm').addEventListener('input', (e) => {
+                setHeartRate(parseInt(e.target.value, 10));
+            });
+
+            // Wiggers Timeline Scrubber Slider & Direct Canvas Dragging
+            const scrubber = document.getElementById('wiggers-scrubber');
+            scrubber.addEventListener('input', (e) => {
+                if (simState.isPlaying) togglePlayPause();
+                simState.cyclePhase = parseFloat(e.target.value);
+            });
+
+            const wiggersContainer = document.getElementById('wiggers-container');
+            let isDraggingWiggers = false;
+            const scrubFromMouseEvent = (e) => {
+                const rect = wiggersContainer.getBoundingClientRect();
+                const ratio = Math.max(0, Math.min(0.999, (e.clientX - rect.left) / rect.width));
+                simState.cyclePhase = ratio;
+                scrubber.value = ratio.toFixed(3);
+            };
+            wiggersContainer.addEventListener('pointerdown', (e) => {
+                isDraggingWiggers = true;
+                if (simState.isPlaying) togglePlayPause();
+                scrubFromMouseEvent(e);
+            });
+            window.addEventListener('pointermove', (e) => {
+                if (isDraggingWiggers) scrubFromMouseEvent(e);
+            });
+            window.addEventListener('pointerup', () => {
+                isDraggingWiggers = false;
+            });
+
+            // Auto-Dim & Reset View Buttons
+            document.getElementById('btn-isolate-mode').addEventListener('click', () => {
+                simState.autoDim = !simState.autoDim;
+                document.getElementById('isolate-indicator').className = `w-2 h-2 rounded-full ${simState.autoDim ? 'bg-sky-400' : 'bg-slate-500'}`;
+                document.querySelector('#btn-isolate-mode span:last-child').textContent = `Auto-Dim: ${simState.autoDim ? 'ON' : 'OFF'}`;
+                refreshMeshHighlighting();
+            });
+
+            document.getElementById('btn-reset-view').addEventListener('click', () => {
+                resetSelectionAndCamera();
+            });
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        // --- MAIN ANIMATION LOOP ---
+        let lastFrameTime = performance.now();
+
+        function animateLoop(now) {
+            requestAnimationFrame(animateLoop);
+
+            const dt = Math.min(0.05, (now - lastFrameTime) / 1000);
+            lastFrameTime = now;
+
+            // Smooth camera transition when an anatomical entity is clicked
+            if (isCameraTweening) {
+                camera.position.lerp(cameraTargetPos, 0.08);
+                controls.target.lerp(controlsTargetLook, 0.08);
+                if (camera.position.distanceTo(cameraTargetPos) < 0.05) {
+                    isCameraTweening = false;
+                }
+            }
+
+            controls.update();
+            updateHeartSimulation(dt);
+            renderer.render(scene, camera);
+            updateFloatingPinPositions();
+            drawWiggersDiagram();
+        }
+
+        window.onload = function () {
+            initThreeScene();
+            bindUIEvents();
+            selectAnatomicalStructure("LV", false);
+            lastFrameTime = performance.now();
+            animateLoop(lastFrameTime);
+        };
+    </script>
+</body>
+</html>

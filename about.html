@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#111516">
+<meta name="description" content="About Cardio Atlas, its interactive study tools and educational model limitations.">
+<title>About · Cardio Atlas</title>
+<link rel="stylesheet" href="./style.css">
+<style>
+.about-main{max-width:860px;margin:0 auto;padding:64px 24px 80px}.about-main h1{font:500 clamp(32px,6vw,54px) 'Space Grotesk',Arial;line-height:1.1;letter-spacing:-1.8px;margin:20px 0}.about-main .lead{font-size:17px;line-height:1.8;color:#aebdaf;max-width:660px}.about-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:36px 0}.about-card{padding:24px;border:1px solid #34402f;border-radius:10px;background:#1b231e}.about-main h2{font:500 20px 'Space Grotesk',Arial;margin:0 0 12px;color:#deebd0}.about-main p,.about-main li{line-height:1.8;color:#9eaf98}.about-card p{margin:0}.about-note{padding:24px;border-left:3px solid var(--accent);background:#212b1d;border-radius:4px;margin:28px 0}.back-link{display:inline-block;background:var(--accent);color:#202b17;padding:13px 20px;border-radius:6px;text-decoration:none;font-weight:600;margin-top:22px}.about-main a:not(.back-link){color:var(--accent)}.about-footer{border-top:1px solid var(--line);margin-top:42px;padding-top:20px;font-size:11px;color:var(--muted)}@media(max-width:600px){.about-grid{grid-template-columns:1fr}.about-main{padding-top:35px}.about-main h1{display:block}.app-header{height:auto;min-height:75px}.about-main .lead{font-size:15px}}
+</style>
+</head>
+<body>
+<header class="app-header"><a class="brand" href="./index.html"><span class="brand-mark" aria-hidden="true">ϟ</span><span>CARDIO<span class="brand-light">ATLAS</span><small>THE INTERACTIVE CARDIAC LAB</small></span></a><a href="./index.html" style="color:var(--accent);text-decoration:none;font-size:12px">← Back to explorer</a></header>
+<main class="about-main">
+<span class="eyebrow">ABOUT THE PROJECT</span>
+<h1>Understand the heart.<br>One beat at a time.</h1>
+<p class="lead">Cardio Atlas brings a three-dimensional heart and a synchronized cardiac-cycle timeline into one interactive study workspace.</p>
+<div class="about-grid">
+<section class="about-card"><h2>Explore anatomy</h2><p>Select among 27 labeled structures, rotate and zoom the model, and enable the cutaway to explore its interior. The insight drawer connects each structure to teaching notes and reference information.</p></section>
+<section class="about-card"><h2>Follow every phase</h2><p>View animated valves, directional blood-flow particles and a conduction overlay alongside the ECG, pressure curves and heart-sound markers.</p></section>
+<section class="about-card"><h2>Study at your pace</h2><p>Pause, scrub the timeline, step between phases, or choose 0.25×, 0.5× or 1× playback. Layer switches let you focus on anatomy, flow or conduction.</p></section>
+<section class="about-card"><h2>Built for the browser</h2><p>The explorer uses Three.js and WebGL2. Its scripts, fonts and rendering dependencies are included with the site. No backend or API key is required.</p></section>
+</div>
+<section class="about-note"><h2>Educational scope</h2><p>This is a procedural teaching model, not clinically validated surgical anatomy. Geometry, motion and flow are simplified. It does not model patient-specific anatomy or solve fluid dynamics. Clinical review and browser/device validation are required before production medical use.</p><p>Open the explorer’s <strong>?</strong> field guide for detailed assumptions, source links and keyboard shortcuts.</p></section>
+<section><h2>Quick controls</h2><ul><li>Drag to orbit; scroll to zoom; right-drag to pan.</li><li>Select a structure in the scene or search list to view its details.</li><li>Press Space to play or pause, C for cutaway, R to reset the view, or / to search.</li></ul></section>
+<a class="back-link" href="./index.html">Open the explorer →</a>
+<footer class="about-footer">Cardio Atlas · Interactive medical education</footer>
+</main>
+</body>
+</html>
