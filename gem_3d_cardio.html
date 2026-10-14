@@ -2446,6 +2446,9 @@
             initRhythmSelectorUI();
             initFloatingPins();
             selectAnatomicalStructure(simState.selectedId, false);
+            const languageUrl = new URL(window.location.href);
+            languageUrl.searchParams.set("lang", simState.lang);
+            window.history.replaceState(null, "", `${languageUrl.pathname}${languageUrl.search}${languageUrl.hash}`);
         }
 
         function setMonitorMode(mode) {
@@ -2819,6 +2822,7 @@
             bindUIEvents();
             prefillScrollingBuffer();
             selectAnatomicalStructure("SAN", false);
+            if (new URLSearchParams(window.location.search).get("lang") === "es") toggleLanguage();
             lastFrameTime = performance.now();
             animateLoop(lastFrameTime);
         };

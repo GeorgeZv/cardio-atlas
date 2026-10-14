@@ -1122,8 +1122,9 @@ const canonicalPages = new Map([
     ["index_es.html", "index.html"],
     ["Chatgpt3b.html", "Chatgpt3b.html"],
     ["Chatgpt3b_es.html", "Chatgpt3b.html"],
+    ["gem_3d_cardio.html", "gem_3d_cardio.html"],
     ["gem_3d_cardiovascular_explorer.html", "gem_3d_cardiovascular_explorer.html"],
-    ["gem_3d_cardiovascular_explorer_es.html", "gem_3d_cardiovascular_explorer.html"],
+    ["gem_3d_cardiovascular_explorer_es.html", "gem_3d_cardio.html"],
     ["gem_3d_neuron.html", "gem_3d_neuron.html"],
     ["gem_3d_neuron_es.html", "gem_3d_neuron.html"]
 ]);
